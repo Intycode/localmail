@@ -122,7 +122,15 @@ impl Engine {
         // OS keychain, passed via env — never written next to the database.
         // Fail-hard: an encrypted database cannot open without its key.
         let db_key = crate::secrets::db_key()?;
-        let mut spawned = Command::new(&bin)
+        let mut command = Command::new(&bin);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            // CREATE_NO_WINDOW: il motore è un binario console-subsystem; senza
+            // questo flag Windows apre una console vuota visibile accanto all'app.
+            command.creation_flags(0x0800_0000);
+        }
+        let mut spawned = command
             .arg("--serve")
             .arg("--db")
             .arg(&self.db_path)
@@ -628,9 +636,11 @@ fn open_with_default(path: &std::path::Path) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         std::process::Command::new("cmd")
             .args(["/C", "start", ""])
             .arg(path)
+            .creation_flags(0x0800_0000) // niente flash di console
             .spawn()
             .map_err(|e| format!("apertura con l'app predefinita: {}", e))?;
         return Ok(());

@@ -16,11 +16,11 @@
     "format": "cd apps/client && bun run format",
     "check": "cd apps/client && bun run check",
     "tauri:dev": "cd apps/client && bun run build && cd ../.. && tauri dev --config src-tauri/tauri.conf.json",
-    "tauri:build": "cd apps/client && bun run build && cd ../.. && tauri build --config src-tauri/tauri.conf.json",
+    "tauri:build": "cd apps/client && bun run build && cd ../.. && tauri build --config src-tauri/tauri.conf.json && bash scripts/sign-windows.sh",
     "backend:test": "cd backend && go test ./...",
     "backend:vet": "cd backend && go vet ./...",
     "backend:build": "cd backend && go build ./...",
-    "engine:build": "cd backend && GOPATH=\"$PWD/.go-home\" GOCACHE=\"$PWD/.go-home/build\" go build -o ../src-tauri/binaries/mail-engine ./cmd/mail && cp ../src-tauri/binaries/mail-engine ../src-tauri/binaries/mail-engine-$(rustc -vV | sed -n 's/host: //p')",
+    "engine:build": "bash scripts/engine-build.sh",
     "backend:run": "cd backend && go run ./cmd/mail"
   },
   "devDependencies": {

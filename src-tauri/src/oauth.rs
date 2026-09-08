@@ -150,8 +150,10 @@ fn open_url(url: &str) -> Result<(), String> {
     };
     #[cfg(target_os = "windows")]
     let mut cmd = {
+        use std::os::windows::process::CommandExt;
         let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "start", "", url]);
+        c.args(["/C", "start", "", url])
+            .creation_flags(0x0800_0000); // niente flash di console
         c
     };
     #[cfg(target_os = "linux")]
