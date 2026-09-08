@@ -1,0 +1,6 @@
+# Bun config — keep install cache inside the workspace so the DSH sandbox
+# allows writes (the default ~/.bun cache is outside the writable workspace).
+[install]
+cache = ".bun-cache"
+
+[install.trustedDependencies]

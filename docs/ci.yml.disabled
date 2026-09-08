@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Frontend (bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck (tsc + astro check)
+        run: bun run check
+      - name: Unit tests
+        run: bun run test
+      - name: Prettier
+        run: bun run lint
+
+  backend:
+    name: Backend (go)
+    runs-on: ubuntu-latest
+    env:
+      # same in-repo toolchain cache as the engine:build script
+      GOPATH: ${{ github.workspace }}/.go-home
+      GOCACHE: ${{ github.workspace }}/.go-home/build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - name: Cache Go toolchain + modules
+        uses: actions/cache@v4
+        with:
+          path: .go-home
+          key: go-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
+      - name: Vet
+        run: go vet ./...
+        working-directory: backend
+      - name: Test
+        run: go test ./...
+        working-directory: backend
+      - name: Build engine binary
+        run: go build -o ../src-tauri/binaries/mail-engine ./cmd/mail
+        working-directory: backend
+
+  rust:
+    name: Bridge (cargo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Format check
+        run: cargo fmt --check
+        working-directory: src-tauri
+      - name: Clippy
+        run: cargo clippy --all-targets
+        working-directory: src-tauri

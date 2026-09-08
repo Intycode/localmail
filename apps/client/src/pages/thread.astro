@@ -1,0 +1,20 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+import MailApp from "../components/app/MailApp"
+import { loadShellData } from "../lib/dataLoader"
+
+// Thread pages cannot be prerendered per id (threads exist only at runtime in
+// the engine's SQLite), so the route is /thread?id=<threadId> and the island
+// fetches thread + messages from the engine client-side.
+const { accounts, folders, activeFolderId } = await loadShellData()
+---
+
+<BaseLayout titleKey="page.thread">
+  <MailApp
+    client:load
+    route="thread"
+    accounts={accounts}
+    folders={folders}
+    activeFolderId={activeFolderId}
+  />
+</BaseLayout>

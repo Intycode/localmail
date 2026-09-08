@@ -1,0 +1,18 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+import MailApp from "../components/app/MailApp"
+import { loadShellData } from "../lib/dataLoader"
+
+// No account is stored yet: the list is empty until a real one is connected.
+const { accounts, folders, activeFolderId } = await loadShellData()
+---
+
+<BaseLayout titleKey="page.accounts">
+  <MailApp
+    client:load
+    route="accounts"
+    accounts={accounts}
+    folders={folders}
+    activeFolderId={activeFolderId}
+  />
+</BaseLayout>

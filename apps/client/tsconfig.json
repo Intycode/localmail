@@ -1,0 +1,30 @@
+{
+  "extends": "../../packages/shared-types/tsconfig.json",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowJs": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["bun-types"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@mail/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@/components/*": ["./src/components/*"],
+      "@/components/ui/*": ["./src/components/ui/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/lib/utils": ["./src/lib/utils.ts"],
+      "@/hooks/*": ["./src/hooks/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.astro", "astro.config.ts"]
+}

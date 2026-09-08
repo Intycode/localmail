@@ -1,0 +1,234 @@
+import * as React from "react"
+import {
+  Archive,
+  ChevronsUpDown,
+  Clock,
+  FilePenLine,
+  Folder as FolderIcon,
+  Import,
+  Inbox,
+  Mail,
+  Mails,
+  Send,
+  Settings,
+  ShieldAlert,
+  Trash2,
+  User,
+} from "lucide-react"
+
+import { cn } from "@/lib/utils"
+import { formatFolderName } from "@/lib/format"
+import { useT } from "@/lib/i18n"
+import type { Account, Folder } from "@/types"
+import { AccountAvatar } from "@/components/app/AccountAvatar"
+import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  SidebarSeparator,
+} from "@/components/ui/sidebar"
+
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  accounts: Account[]
+  folders: Folder[]
+  activeFolderId: string
+  /** the unified inbox (?account=all) is the active view */
+  unifiedActive?: boolean
+}
+
+/** Minimal monochrome glyph per folder type. The lookup fallback guards
+ *  against backend folder types the client does not know yet (an undefined
+ *  icon would crash the whole sidebar render). */
+const folderIcons: Record<Folder["type"], React.ComponentType<{ className?: string }>> = {
+  inbox: Inbox,
+  sent: Send,
+  drafts: FilePenLine,
+  archive: Archive,
+  trash: Trash2,
+  junk: ShieldAlert,
+  snoozed: Clock,
+  custom: FolderIcon,
+  import: Import,
+}
+
+export function AppSidebar({
+  accounts,
+  folders,
+  activeFolderId,
+  unifiedActive,
+  ...props
+}: AppSidebarProps) {
+  const t = useT()
+  const activeAccount = accounts.find((a) => a.isActive) ?? accounts[0]
+  // Unified view entry: meaningful only with more than one account. The badge
+  // sums every account's inbox unread count.
+  const showUnified = accounts.length >= 2
+  const unifiedUnread = accounts.reduce(
+    (sum, a) =>
+      sum + (a.folders ?? []).filter((f) => f.type === "inbox").reduce((s, f) => s + f.unread, 0),
+    0,
+  )
+
+  return (
+    <Sidebar collapsible="offcanvas" {...props}>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <AccountSwitcher accounts={accounts} active={activeAccount} />
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>{t("nav.folders")}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            {accounts.length === 0 && (
+              <p className="mb-2 px-2 text-xs text-muted-foreground">
+                {t("nav.noAccounts")}{" "}
+                <a className="text-primary underline-offset-4 hover:underline" href="/accounts">
+                  {t("nav.connectOne")}
+                </a>
+                .
+              </p>
+            )}
+            <SidebarMenu>
+              {showUnified && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={unifiedActive}
+                    tooltip={t("nav.allMailboxes")}
+                  >
+                    <a href="/?account=all" aria-current={unifiedActive ? "page" : undefined}>
+                      <Mails />
+                      <span>{t("nav.allMailboxes")}</span>
+                    </a>
+                  </SidebarMenuButton>
+                  {unifiedUnread > 0 && (
+                    <SidebarMenuBadge className="tabular-nums">{unifiedUnread}</SidebarMenuBadge>
+                  )}
+                </SidebarMenuItem>
+              )}
+              {folders.map((f) => {
+                const Icon = folderIcons[f.type] ?? FolderIcon
+                const active = f.id === activeFolderId
+                return (
+                  <SidebarMenuItem key={f.id}>
+                    <SidebarMenuButton asChild isActive={active} tooltip={formatFolderName(f.name)}>
+                      <a href={`/?folder=${f.id}`} aria-current={active ? "page" : undefined}>
+                        <Icon />
+                        <span>{formatFolderName(f.name)}</span>
+                      </a>
+                    </SidebarMenuButton>
+                    {f.unread > 0 && (
+                      <SidebarMenuBadge className="tabular-nums">{f.unread}</SidebarMenuBadge>
+                    )}
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter>
+        <SidebarSeparator />
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip={t("nav.accounts")}>
+              <a href="/accounts">
+                <User />
+                <span>{t("nav.accounts")}</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip={t("nav.settings")}>
+              <a href="/settings">
+                <Settings />
+                <span>{t("nav.settings")}</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
+  )
+}
+
+function AccountSwitcher({ accounts, active }: { accounts: Account[]; active?: Account }) {
+  const t = useT()
+  if (accounts.length === 0) {
+    return (
+      <SidebarMenuButton size="lg" asChild>
+        <a href="/accounts">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Mail className="size-4" />
+          </span>
+          <div className="grid min-w-0 flex-1 leading-tight">
+            <span className="truncate font-semibold">Mail</span>
+            <span className="truncate text-xs text-muted-foreground">{t("nav.noAccountYet")}</span>
+          </div>
+        </a>
+      </SidebarMenuButton>
+    )
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <SidebarMenuButton
+          size="lg"
+          className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+        >
+          {active && <AccountAvatar accountId={active.id} name={active.name} size="md" />}
+          <div className="grid min-w-0 flex-1 leading-tight">
+            <span className="truncate font-semibold">{active?.name ?? "Mail"}</span>
+            <span className="truncate text-xs text-muted-foreground">{active?.email}</span>
+          </div>
+          <ChevronsUpDown className="ml-auto size-4 opacity-50" />
+        </SidebarMenuButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+        align="start"
+        side="bottom"
+      >
+        <DropdownMenuLabel>{t("nav.accounts")}</DropdownMenuLabel>
+        {accounts.map((a) => (
+          <DropdownMenuItem key={a.id} asChild>
+            <a href="/accounts" className={cn(a.isActive && "font-semibold")}>
+              <AccountAvatar accountId={a.id} name={a.name} size="sm" />
+              <span className="min-w-0 flex-1 truncate">{a.email}</span>
+              {a.isActive && <Badge variant="secondary">{t("nav.activeBadge")}</Badge>}
+            </a>
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href="/accounts">{t("nav.manageAccounts")}</a>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}

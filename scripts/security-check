@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# scripts/security-check — vulnerability scan of Go and Rust dependencies.
+# Degrades gracefully with clear messages when a scanner is not installed.
+set -u
+cd "$(dirname "$0")/.."
+status=0
+
+echo "== Go: govulncheck =="
+if command -v govulncheck >/dev/null 2>&1; then
+  (cd backend && export GOPATH="$PWD/.go-home" GOCACHE="$PWD/.go-home/build" && govulncheck ./...) || status=1
+else
+  echo "SKIP: govulncheck non installato (go install golang.org/x/vuln/cmd/govulncheck@latest)"
+fi
+
+echo "== Rust: cargo audit =="
+if command -v cargo-audit >/dev/null 2>&1 || cargo audit --version >/dev/null 2>&1; then
+  (cd src-tauri && cargo audit) || status=1
+else
+  echo "SKIP: cargo-audit non installato (cargo install cargo-audit)"
+fi
+
+echo "== Segreti nel database di test =="
+tmpdb="$(mktemp -d)/check.db"
+(cd backend && export GOPATH="$PWD/.go-home" GOCACHE="$PWD/.go-home/build" && go run ./cmd/mail -db "$tmpdb" >/dev/null 2>&1)
+if [ -f "$tmpdb" ] && strings "$tmpdb" | grep -qi 'password'; then
+  echo "WARN: trovato 'password' nel dump (verifica se è solo lo schema)"
+fi
+rm -rf "$(dirname "$tmpdb")"
+
+exit $status

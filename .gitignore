@@ -1,0 +1,58 @@
+# ─── Dependencies ────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.*
+
+# ─── Build outputs ───────────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+out/
+
+# ─── Astro ───────────────────────────────────────────────────────
+.astro/
+
+# ─── Bun ─────────────────────────────────────────────────────────
+*.lockb
+.bun/
+
+# ─── Tauri 2 / Rust ──────────────────────────────────────────────
+src-tauri/target/
+src-tauri/.cargo-target/
+src-tauri/.cargo-home/
+src-tauri/gen/schemas/
+# Cargo.lock is tracked (application, not library)
+
+# ─── Go backend ──────────────────────────────────────────────────
+backend/mail
+backend/*.exe
+backend/*.test
+backend/vendor/
+backend/.go-home/
+
+# ─── Env files ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Logs ────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun-debug.log*
+
+# ─── Editor / IDE ────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── OS ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

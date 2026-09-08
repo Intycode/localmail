@@ -1,0 +1,19 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+import MailApp from "../components/app/MailApp"
+import { loadShellData } from "../lib/dataLoader"
+
+// Local-first: the shell (accounts + folders) is pre-rendered from the local
+// store. Nothing is connected yet, so the sidebar shows its empty state.
+const { accounts, folders, activeFolderId } = await loadShellData()
+---
+
+<BaseLayout titleKey="page.inbox">
+  <MailApp
+    client:load
+    route="inbox"
+    accounts={accounts}
+    folders={folders}
+    activeFolderId={activeFolderId}
+  />
+</BaseLayout>

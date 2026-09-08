@@ -1,0 +1,17 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+import MailApp from "../components/app/MailApp"
+import { loadShellData } from "../lib/dataLoader"
+
+const { accounts, folders, activeFolderId } = await loadShellData()
+---
+
+<BaseLayout titleKey="page.search">
+  <MailApp
+    client:load
+    route="search"
+    accounts={accounts}
+    folders={folders}
+    activeFolderId={activeFolderId}
+  />
+</BaseLayout>

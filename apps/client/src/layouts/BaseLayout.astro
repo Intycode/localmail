@@ -1,0 +1,96 @@
+---
+import "../styles/global.css"
+
+// Build-time page titles from the Italian reference dictionary; the client
+// bootstrap below swaps in the active locale before first paint.
+import { it } from "../lib/i18n/dictionaries/it"
+
+interface Props {
+  /** Dictionary key of the document title (e.g. "page.inbox"). */
+  titleKey: string
+}
+const { titleKey } = Astro.props
+const title = it[titleKey] ?? titleKey
+---
+
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <link rel="icon" href="./favicon.svg" />
+    <script is:inline define:vars={{ titleKey }}>
+      document.documentElement.dataset.pageTitle = titleKey
+    </script>
+    <script is:inline>
+      // Locale bootstrap: apply the persisted (or system) language before
+      // first paint — document.lang and the page title. Mirrors lib/i18n.
+      ;(() => {
+        const KEY = "mail.setting.locale"
+        // page.* titles for both locales (mirror of the dictionaries)
+        const titles = {
+          it: {
+            "page.inbox": "Inbox — Mail",
+            "page.thread": "Conversazione — Mail",
+            "page.compose": "Componi — Mail",
+            "page.search": "Cerca — Mail",
+            "page.accounts": "Account — Mail",
+            "page.settings": "Impostazioni — Mail",
+          },
+          en: {
+            "page.inbox": "Inbox — Mail",
+            "page.thread": "Thread — Mail",
+            "page.compose": "Compose — Mail",
+            "page.search": "Search — Mail",
+            "page.accounts": "Accounts — Mail",
+            "page.settings": "Settings — Mail",
+          },
+        }
+        let locale = null
+        try {
+          const saved = localStorage.getItem(KEY)
+          if (saved === "it" || saved === "en") locale = saved
+        } catch {}
+        if (!locale) {
+          for (const lang of navigator.languages ?? [navigator.language]) {
+            const base = (lang ?? "").toLowerCase().split("-")[0]
+            if (base === "en" || base === "it") {
+              locale = base
+              break
+            }
+          }
+        }
+        if (!locale) locale = "it"
+        document.documentElement.lang = locale
+        const titleKey = document.documentElement.dataset.pageTitle
+        if (titleKey && titles[locale][titleKey]) document.title = titles[locale][titleKey]
+      })()
+      // Theme bootstrap: apply the persisted mode (System/Light/Dark) before
+      // first paint so there is no flash. Mirrors lib/theme.ts.
+      ;(() => {
+        const stored = localStorage.getItem("mail.setting.theme") ?? "system"
+        const dark =
+          stored === "dark" ||
+          (stored !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)
+        document.documentElement.classList.toggle("dark", dark)
+        document.documentElement.style.colorScheme = dark ? "dark" : "light"
+        // Tauri window chrome: mark the runtime and the OS before first paint
+        // so the custom title bar styles apply with no flash (transparent
+        // body, macOS corner radius). Mirrors lib/platform.ts.
+        if ("__TAURI_INTERNALS__" in window) {
+          const ua = navigator.userAgent
+          document.documentElement.dataset.tauri = "true"
+          document.documentElement.dataset.tauriOs = ua.includes("Macintosh")
+            ? "macos"
+            : ua.includes("Windows")
+              ? "windows"
+              : "linux"
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
