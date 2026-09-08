@@ -15,6 +15,7 @@ out/
 # ─── Bun ─────────────────────────────────────────────────────────
 *.lockb
 .bun/
+.bun-cache/
 
 # ─── Tauri 2 / Rust ──────────────────────────────────────────────
 src-tauri/target/
@@ -22,6 +23,10 @@ src-tauri/.cargo-target/
 src-tauri/.cargo-home/
 src-tauri/gen/schemas/
 # Cargo.lock is tracked (application, not library)
+
+# ─── Binari del motore Go (generati da `bun run engine:build`) ───
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
 
 # ─── Go backend ──────────────────────────────────────────────────
 backend/mail
