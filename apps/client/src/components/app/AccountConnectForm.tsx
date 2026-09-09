@@ -1,12 +1,13 @@
 import * as React from "react"
 import type { SubmitEvent } from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 
 import { getMailService } from "@/services/serviceRegistry"
 import { isTauri } from "@/services/tauriMailService"
 import { t, useT } from "@/lib/i18n"
 import type { Account, ImapAccountDraft, ImapConfig, SmtpConfig } from "@/types"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -60,6 +61,9 @@ export function AccountConnectForm({
   const [googleStarting, setGoogleStarting] = React.useState(false)
   const [microsoftStarting, setMicrosoftStarting] = React.useState(false)
   const [showPassword, setShowPassword] = React.useState(false)
+  /** last engine error, shown inline inside the dialog: a 4s toast is too
+   *  easy to miss while the modal stays open on failure. */
+  const [submitError, setSubmitError] = React.useState("")
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((f) => {
@@ -90,6 +94,7 @@ export function AccountConnectForm({
 
   async function submit(e: SubmitEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault()
+    setSubmitError("")
     const found = validate(form)
     setErrors(found)
     if (Object.keys(found).length > 0) return
@@ -147,7 +152,11 @@ export function AccountConnectForm({
       setErrors({})
       onConnected()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("connect.addFailed"))
+      const message = err instanceof Error ? err.message : t("connect.addFailed")
+      setSubmitError(message)
+      // long duration: the exact server error is the only diagnostic the
+      // user has (wrong host, auth failure, blocked port…)
+      toast.error(message, { duration: 10_000 })
     } finally {
       setSubmitting(false)
     }
@@ -162,6 +171,7 @@ export function AccountConnectForm({
       return
     }
     setMicrosoftStarting(true)
+    setSubmitError("")
     try {
       const svc = await getMailService()
       if (!svc.oauthMicrosoftBegin) throw new Error(t("common.engineOnly"))
@@ -194,7 +204,9 @@ export function AccountConnectForm({
       toast.success(t("connect.microsoftConnected"))
       onConnected()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t("connect.microsoftFailed"))
+      const message = err instanceof Error ? err.message : t("connect.microsoftFailed")
+      setSubmitError(message)
+      toast.error(message, { duration: 10_000 })
     } finally {
       setMicrosoftStarting(false)
     }
@@ -208,6 +220,7 @@ export function AccountConnectForm({
       return
     }
     setGoogleStarting(true)
+    setSubmitError("")
     try {
       const svc = await getMailService()
       if (!svc.oauthGoogleStart) throw new Error(t("common.engineOnly"))
@@ -238,7 +251,9 @@ export function AccountConnectForm({
       toast.success(t("connect.googleConnected"))
       onConnected()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t("connect.googleFailed"))
+      const message = err instanceof Error ? err.message : t("connect.googleFailed")
+      setSubmitError(message)
+      toast.error(message, { duration: 10_000 })
     } finally {
       setGoogleStarting(false)
     }
@@ -250,6 +265,13 @@ export function AccountConnectForm({
     <>
       <form id={formId} className={bodyClassName} onSubmit={(e) => void submit(e)}>
         <FieldGroup className="gap-4">
+          {submitError && (
+            <Alert variant="destructive" role="alert">
+              <TriangleAlert />
+              <AlertTitle>{t("connect.errorTitle")}</AlertTitle>
+              <AlertDescription className="break-words">{submitError}</AlertDescription>
+            </Alert>
+          )}
           <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-3.5 py-3">
             <div className="min-w-0">
               <p className="text-sm font-medium">{t("connect.gmail")}</p>

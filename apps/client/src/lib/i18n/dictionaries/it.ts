@@ -324,6 +324,7 @@ export const it: Record<string, string> = {
   "connect.browserOnly": "Aggiungere account è disponibile nell'app Mail, non nel browser.",
   "connect.added": "Account aggiunto: avvio della prima sincronizzazione",
   "connect.addFailed": "Aggiunta account non riuscita",
+  "connect.errorTitle": "Connessione non riuscita",
   "connect.errName": "Inserisci un nome.",
   "connect.errEmail": "Inserisci l'indirizzo email.",
   "connect.errJmapUrl": "Inserisci l'URL di sessione JMAP.",

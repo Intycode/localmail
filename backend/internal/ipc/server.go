@@ -220,6 +220,10 @@ func (s *Server) handleLine(line []byte) {
 	case r := <-done:
 		resp := response{ID: req.ID, OK: r.err == nil}
 		if r.err != nil {
+			// op failures only travel the IPC response (easy to miss in the
+			// UI): also leave a trace in the rotating engine log so support
+			// can diagnose what the user's server actually replied.
+			log.Printf("op %s: %v", req.Op, r.err)
 			// Offline-first: a queueable op that failed at the transport level
 			// is parked in pending_ops and reported as queued, not failed.
 			if queueableOps[req.Op] && isNetworkError(r.err) && s.enqueueFailedOp(req.Op, req.Params) {
