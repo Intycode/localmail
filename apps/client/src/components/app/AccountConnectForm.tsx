@@ -64,6 +64,19 @@ export function AccountConnectForm({
   /** last engine error, shown inline inside the dialog: a 4s toast is too
    *  easy to miss while the modal stays open on failure. */
   const [submitError, setSubmitError] = React.useState("")
+  const formRef = React.useRef<HTMLFormElement>(null)
+
+  /** Surfaces a failure: sticky toast + inline alert scrolled into view.
+   *  The alert renders at the top of the scrollable body, but the user is
+   *  typically scrolled to the password field when the error lands — without
+   *  the scroll the submit seems to silently do nothing. */
+  function fail(message: string): void {
+    setSubmitError(message)
+    // sticky: the exact server error is the only diagnostic the user has
+    // (wrong host, auth failure, blocked port…) — dismissed by hand
+    toast.error(message, { duration: Infinity })
+    formRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((f) => {
@@ -152,11 +165,7 @@ export function AccountConnectForm({
       setErrors({})
       onConnected()
     } catch (err) {
-      const message = err instanceof Error ? err.message : t("connect.addFailed")
-      setSubmitError(message)
-      // long duration: the exact server error is the only diagnostic the
-      // user has (wrong host, auth failure, blocked port…)
-      toast.error(message, { duration: 10_000 })
+      fail(err instanceof Error && err.message.trim() ? err.message : t("connect.addFailed"))
     } finally {
       setSubmitting(false)
     }
@@ -204,9 +213,7 @@ export function AccountConnectForm({
       toast.success(t("connect.microsoftConnected"))
       onConnected()
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t("connect.microsoftFailed")
-      setSubmitError(message)
-      toast.error(message, { duration: 10_000 })
+      fail(err instanceof Error && err.message.trim() ? err.message : t("connect.microsoftFailed"))
     } finally {
       setMicrosoftStarting(false)
     }
@@ -251,9 +258,7 @@ export function AccountConnectForm({
       toast.success(t("connect.googleConnected"))
       onConnected()
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t("connect.googleFailed")
-      setSubmitError(message)
-      toast.error(message, { duration: 10_000 })
+      fail(err instanceof Error && err.message.trim() ? err.message : t("connect.googleFailed"))
     } finally {
       setGoogleStarting(false)
     }
@@ -263,7 +268,7 @@ export function AccountConnectForm({
 
   return (
     <>
-      <form id={formId} className={bodyClassName} onSubmit={(e) => void submit(e)}>
+      <form ref={formRef} id={formId} className={bodyClassName} onSubmit={(e) => void submit(e)}>
         <FieldGroup className="gap-4">
           {submitError && (
             <Alert variant="destructive" role="alert">
