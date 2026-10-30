@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { getMailService } from "@/services/serviceRegistry"
 import { formatFolderName } from "@/lib/format"
 import { useT } from "@/lib/i18n"
-import { ioService, isTauri } from "@/services/tauriMailService"
+import { ioService, isTauri, pickPath } from "@/services/tauriMailService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -53,8 +53,7 @@ export function AccountsIo({ accounts }: { accounts: Account[] }): React.JSX.Ele
     }
     setBusy(true)
     try {
-      const { save } = await import("@tauri-apps/plugin-dialog")
-      const dest = await save({
+      const [dest] = await pickPath("save", {
         defaultPath: "archivio.mbox",
         filters: [{ name: "mbox", extensions: ["mbox"] }],
       })
@@ -80,13 +79,11 @@ export function AccountsIo({ accounts }: { accounts: Account[] }): React.JSX.Ele
     }
     setBusy(true)
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog")
-      const src = await open({
-        multiple: false,
+      const [src] = await pickPath("open", {
         filters: [{ name: "Email", extensions: ["mbox", "eml"] }],
       })
       if (!src) return
-      const res = await ioService.importMails(accountId, src as string)
+      const res = await ioService.importMails(accountId, src)
       toast.success(
         t("io.imported", {
           count: res.imported,
@@ -103,14 +100,11 @@ export function AccountsIo({ accounts }: { accounts: Account[] }): React.JSX.Ele
   async function backup(): Promise<void> {
     setBusy(true)
     try {
-      const [{ save }, { appDataDir }] = await Promise.all([
-        import("@tauri-apps/plugin-dialog"),
-        import("@tauri-apps/api/path"),
-      ])
+      const { appDataDir } = await import("@tauri-apps/api/path")
       // default to the app-data dir: the app always has full access there, so
       // neither backup nor restore can hit macOS TCC folder restrictions.
       const dir = await appDataDir()
-      const dest = await save({
+      const [dest] = await pickPath("save", {
         defaultPath: dir + "/mail-backup.db",
         filters: [{ name: "SQLite", extensions: ["db"] }],
       })
@@ -127,13 +121,12 @@ export function AccountsIo({ accounts }: { accounts: Account[] }): React.JSX.Ele
   async function restore(): Promise<void> {
     setBusy(true)
     try {
-      const [{ open, ask }, { appDataDir }] = await Promise.all([
+      const [{ ask }, { appDataDir }] = await Promise.all([
         import("@tauri-apps/plugin-dialog"),
         import("@tauri-apps/api/path"),
       ])
       const dir = await appDataDir()
-      const src = await open({
-        multiple: false,
+      const [src] = await pickPath("open", {
         defaultPath: dir,
         filters: [{ name: "SQLite", extensions: ["db"] }],
       })
@@ -143,7 +136,7 @@ export function AccountsIo({ accounts }: { accounts: Account[] }): React.JSX.Ele
         kind: "warning",
       })
       if (!go) return
-      await ioService.backupRestore(src as string)
+      await ioService.backupRestore(src)
       // full reload: every store/thread/folder in the webview was loaded from
       // the pre-restore database — re-read everything from the restored one.
       toast.success(t("io.restored"))

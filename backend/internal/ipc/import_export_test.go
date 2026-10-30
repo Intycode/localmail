@@ -88,6 +88,9 @@ func TestImportMailsFromMbox(t *testing.T) {
 	if out2.(map[string]any)["imported"].(int) != 2 {
 		t.Fatal("secondo import fallito")
 	}
+	if all, _ := app.Messages.ListByFolder(folderID); len(all) != 4 {
+		t.Fatalf("il secondo import ha sovrascritto il primo: %d messaggi", len(all))
+	}
 }
 
 func TestExportMailboxRoundTrip(t *testing.T) {

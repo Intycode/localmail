@@ -354,7 +354,12 @@ where
 }
 
 #[tauri::command]
-pub async fn engine_invoke(state: tauri::State<'_, Arc<Engine>>, op: String, params: Value) -> Result<Value, ()> {
+pub async fn engine_invoke(
+    state: tauri::State<'_, Arc<Engine>>,
+    app: AppHandle,
+    op: String,
+    params: Value,
+) -> Result<Value, ()> {
     // secret-bearing ops must go through the dedicated commands so the
     // webview never passes (or receives) credentials here.
     if SECRET_OPS.contains(&op.as_str()) {
@@ -368,6 +373,15 @@ pub async fn engine_invoke(state: tauri::State<'_, Arc<Engine>>, op: String, par
             "l'op {} è interna al motore: gestita da Tauri, non dalla UI",
             op
         ))));
+    }
+    // ops that read/write a host file: only paths the user picked
+    let path_keys: &[&str] = match op.as_str() {
+        "export.message" | "export.mailbox" => &["dest"],
+        "import.mails" => &["src"],
+        _ => &[],
+    };
+    if let Err(e) = crate::paths::check_params(&app, &params, path_keys) {
+        return Ok(envelope(Err(e)));
     }
     Ok(run_engine(state, move |engine| {
         engine.invoke(&op, params, Engine::timeout_for(&op))
@@ -411,16 +425,15 @@ pub async fn account_add(
                     // OAuth marker: oauth/<id> exists only for OAuth accounts and
                     // caches the short-lived access token (effective_secret).
                     if is_oauth {
-                        crate::secrets::entry_for(&format!("oauth/{}", id))?
-                            .set_password(
-                                &json!({
-                                    "access": "",
-                                    "expiry": 0,
-                                    "provider": provider.as_deref().unwrap_or("")
-                                })
-                                .to_string(),
-                            )
-                            .map_err(|e| format!("scrittura keychain non riuscita: {}", e))?;
+                        crate::secrets::set(
+                            &format!("oauth/{}", id),
+                            &json!({
+                                "access": "",
+                                "expiry": 0,
+                                "provider": provider.as_deref().unwrap_or("")
+                            })
+                            .to_string(),
+                        )?;
                     }
                     Ok(())
                 }) {
@@ -456,9 +469,18 @@ pub async fn account_sync(
 #[tauri::command]
 pub async fn account_send(
     state: tauri::State<'_, Arc<Engine>>,
+    app: AppHandle,
     account_id: String,
     message: Value,
 ) -> Result<Value, ()> {
+    // outgoing attachments are read from disk by the engine: picked files only
+    if let Some(files) = message.get("files").and_then(|f| f.as_array()) {
+        for f in files {
+            if let Err(e) = crate::paths::check_params(&app, f, &["path"]) {
+                return Ok(envelope(Err(e)));
+            }
+        }
+    }
     Ok(run_engine(state, move |engine| {
         engine.account_secret(&account_id).and_then(|secret| {
             engine.invoke(
@@ -474,11 +496,15 @@ pub async fn account_send(
 #[tauri::command]
 pub async fn attachment_export(
     state: tauri::State<'_, Arc<Engine>>,
+    app: AppHandle,
     account_id: String,
     message_id: String,
     name: String,
     dest: String,
 ) -> Result<Value, ()> {
+    if let Err(e) = crate::paths::check(&app, &dest) {
+        return Ok(envelope(Err(e)));
+    }
     Ok(run_engine(state, move |engine| {
         engine.account_secret(&account_id).and_then(|secret| {
             engine.invoke(
@@ -751,9 +777,7 @@ pub async fn account_remove(state: tauri::State<'_, Arc<Engine>>, account_id: St
             eprintln!("secrets: {}", e);
         }
         // OAuth marker + access-token cache (best effort)
-        if let Ok(marker) = crate::secrets::entry_for(&format!("oauth/{}", account_id)) {
-            let _ = marker.delete_credential();
-        }
+        let _ = crate::secrets::delete(&format!("oauth/{}", account_id));
         result
     })
     .await)
@@ -809,13 +833,23 @@ fn chrono_now() -> String {
 
 impl Engine {
     /// stop terminates the engine child (if any) so the local DB file is no
-    /// longer held open. The next invoke respawns a fresh engine.
+    /// longer held open. The next invoke respawns a fresh engine. Closing
+    /// stdin first lets the engine checkpoint the WAL into the db file and
+    /// exit cleanly (a killed engine leaves recent writes in mail.db-wal);
+    /// kill only if it does not exit in time.
     pub fn stop(&self) {
+        *self.stdin.lock().unwrap() = None;
         if let Some(mut old) = self.child.lock().unwrap().take() {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while std::time::Instant::now() < deadline {
+                if let Ok(Some(_)) = old.try_wait() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
             let _ = old.kill();
             let _ = old.wait();
         }
-        *self.stdin.lock().unwrap() = None;
         self.dead.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 }
@@ -853,7 +887,14 @@ fn copy_wal(src_db: &std::path::Path, dest_db: &std::path::Path) {
 /// answers "unable to open"). The WAL sidecar travels along so no committed
 /// frame is lost; an existing destination is overwritten.
 #[tauri::command]
-pub async fn backup_create(state: tauri::State<'_, Arc<Engine>>, dest: String) -> Result<Value, ()> {
+pub async fn backup_create(
+    state: tauri::State<'_, Arc<Engine>>,
+    app: AppHandle,
+    dest: String,
+) -> Result<Value, ()> {
+    if let Err(e) = crate::paths::check(&app, &dest) {
+        return Ok(envelope(Err(e)));
+    }
     Ok(run_engine(state, move |engine| {
         engine.stop(); // no open handles, no concurrent writes
         let src = engine.db_path.clone();
@@ -883,7 +924,14 @@ pub async fn backup_create(state: tauri::State<'_, Arc<Engine>>, dest: String) -
 /// are dropped; the backup's WAL is restored with the file. The DB
 /// encryption key is unchanged (same keychain).
 #[tauri::command]
-pub async fn backup_restore(state: tauri::State<'_, Arc<Engine>>, src: String) -> Result<Value, ()> {
+pub async fn backup_restore(
+    state: tauri::State<'_, Arc<Engine>>,
+    app: AppHandle,
+    src: String,
+) -> Result<Value, ()> {
+    if let Err(e) = crate::paths::check(&app, &src) {
+        return Ok(envelope(Err(e)));
+    }
     Ok(run_engine(state, move |engine| {
         let dest = engine.db_path.clone();
         // 1) stage the backup next to the live db (same volume => rename works).

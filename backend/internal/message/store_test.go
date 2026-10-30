@@ -117,6 +117,33 @@ func TestUpsertReplacesSameID(t *testing.T) {
 	}
 }
 
+// A re-upsert (draft re-save, Sent re-fetch) must keep the message's labels
+// and leave exactly one, current, search row.
+func TestUpsertKeepsLabelsAndSingleSearchRow(t *testing.T) {
+	s := seedStore(t)
+	if err := s.UpsertBatch([]domain.Message{sampleMsg("m1", "f1", nil)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO labels(id,name) VALUES('l1','Lavoro')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO message_labels(message,label) VALUES('m1','l1')`); err != nil {
+		t.Fatal(err)
+	}
+	updated := sampleMsg("m1", "f1", nil)
+	updated.BodyText = "testo nuovo"
+	if err := s.UpsertBatch([]domain.Message{updated}); err != nil {
+		t.Fatal(err)
+	}
+	var labels, rows int
+	var body string
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM message_labels WHERE message='m1'`).Scan(&labels)
+	_ = s.db.QueryRow(`SELECT COUNT(*), MAX(body) FROM mail_fts WHERE message_id='m1'`).Scan(&rows, &body)
+	if labels != 1 || rows != 1 || body != "testo nuovo" {
+		t.Fatalf("labels=%d fts rows=%d body=%q", labels, rows, body)
+	}
+}
+
 func TestDeleteFullAndUIDs(t *testing.T) {
 	s := seedStore(t)
 	m := sampleMsg("m1", "f1", nil)

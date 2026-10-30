@@ -64,6 +64,9 @@ func main() {
 			fmt.Fprintln(os.Stderr, "ipc:", err)
 			os.Exit(1)
 		}
+		// stdin closed (Tauri stop): fold the WAL into the db file so a
+		// backup copy is one self-contained file
+		_, _ = db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
 		return
 	}
 

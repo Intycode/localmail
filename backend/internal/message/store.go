@@ -144,8 +144,16 @@ func upsertOne(tx *sql.Tx, m *domain.Message) error {
 		return fmt.Errorf("clear recipients: %w", err)
 	}
 	if _, err := tx.Exec(
-		`INSERT OR REPLACE INTO messages(id,thread,folder,account,subject,from_name,from_email,body,body_text,date,is_unread,is_starred,provider_msg_id,message_id,in_reply_to,references_hdr,remote_images,spam_score,phishing,is_encrypted,sig_status)
-		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		// UPSERT, not INSERT OR REPLACE: REPLACE deletes the row first, which
+		// cascade-drops its labels and skips the FTS delete trigger
+		`INSERT INTO messages(id,thread,folder,account,subject,from_name,from_email,body,body_text,date,is_unread,is_starred,provider_msg_id,message_id,in_reply_to,references_hdr,remote_images,spam_score,phishing,is_encrypted,sig_status)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 ON CONFLICT(id) DO UPDATE SET thread=excluded.thread, folder=excluded.folder, account=excluded.account,
+		   subject=excluded.subject, from_name=excluded.from_name, from_email=excluded.from_email, body=excluded.body,
+		   body_text=excluded.body_text, date=excluded.date, is_unread=excluded.is_unread, is_starred=excluded.is_starred,
+		   provider_msg_id=excluded.provider_msg_id, message_id=excluded.message_id, in_reply_to=excluded.in_reply_to,
+		   references_hdr=excluded.references_hdr, remote_images=excluded.remote_images, spam_score=excluded.spam_score,
+		   phishing=excluded.phishing, is_encrypted=excluded.is_encrypted, sig_status=excluded.sig_status`,
 		m.ID, m.ThreadID, m.FolderID, m.AccountID, m.Subject, m.From.Name, m.From.Email,
 		m.Body, m.BodyText, m.Date.UTC().Format(timeFmt), boolInt(m.IsUnread), boolInt(m.IsStarred),
 		m.ProviderMessageID, m.MessageID, strings.Join(m.InReplyTo, " "), strings.Join(m.References, " "), m.RemoteImages, m.SpamScore, encodePhishing(m.Phishing), boolInt(m.IsEncrypted), m.SigStatus,
@@ -510,6 +518,39 @@ func (s *Store) UpdateFolderCounters(folderID string) error {
 		return fmt.Errorf("folder counters %s: %w", folderID, err)
 	}
 	return nil
+}
+
+// ApplyServerRead mirrors read/unread changes made by other clients
+// (unread: message id -> unread on the server). Only differing rows are
+// written; then the folder's thread aggregates and badge are refreshed.
+func (s *Store) ApplyServerRead(folderID string, unread map[string]bool) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	changed := false
+	for id, u := range unread {
+		res, err := tx.Exec(`UPDATE messages SET is_unread=? WHERE id=? AND is_unread<>?`, boolInt(u), id, boolInt(u))
+		if err != nil {
+			return fmt.Errorf("server read %s: %w", id, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	if _, err := tx.Exec(`UPDATE threads SET is_unread=(SELECT COALESCE(MAX(is_unread),0) FROM messages WHERE thread=threads.id)
+		WHERE folder=?`, folderID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE folders SET unread = (SELECT COUNT(*) FROM threads WHERE folder = folders.id AND is_unread = 1)
+		WHERE id = ?`, folderID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // UpdateThreadRead keeps the thread aggregate consistent after mark-read.

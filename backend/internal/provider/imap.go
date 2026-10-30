@@ -94,6 +94,23 @@ func (p *ImapProvider) SyncFolder(ref FolderRef) (FolderSync, error) {
 	if err != nil {
 		return FolderSync{}, err
 	}
+	var flags map[uint32][]string
+	if !initial {
+		// flag changes made by other clients on messages synced before.
+		// shortcut: newest maxFlagSync UIDs only; CONDSTORE (CHANGEDSINCE) would make it incremental for huge folders.
+		var known []uint32
+		for _, u := range all {
+			if u <= ref.LastUID {
+				known = append(known, u)
+			}
+		}
+		if len(known) > maxFlagSync {
+			known = known[len(known)-maxFlagSync:]
+		}
+		if flags, err = s.Flags(known); err != nil {
+			return FolderSync{}, err
+		}
+	}
 	msgs := make([]RawMessage, 0, len(fetched))
 	for _, m := range fetched {
 		msgs = append(msgs, RawMessage{UID: m.UID, Flags: m.Flags, Data: m.Data})
@@ -103,8 +120,12 @@ func (p *ImapProvider) SyncFolder(ref FolderRef) (FolderSync, error) {
 		UIDValidity: state.UIDValidity,
 		Messages:    msgs,
 		AllUIDs:     all,
+		Flags:       flags,
 	}, nil
 }
+
+// maxFlagSync caps the flag re-read per folder pass.
+const maxFlagSync = 5000
 
 func (p *ImapProvider) selectAndDo(mailbox string, fn func(s imap.Session) error) error {
 	s, err := p.sessionFor()

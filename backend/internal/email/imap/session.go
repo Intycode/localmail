@@ -34,6 +34,8 @@ type Session interface {
 	UIDs() ([]uint32, error)
 	// Fetch returns raw MIME for the given UIDs (BODY.PEEK: never sets \Seen).
 	Fetch(uids []uint32) ([]RawMessage, error)
+	// Flags returns the current flags of the given UIDs (no bodies).
+	Flags(uids []uint32) (map[uint32][]string, error)
 	// MarkSeen adds the \Seen flag to the given UIDs.
 	MarkSeen(uids []uint32) error
 	// MarkUnseen removes the \Seen flag from the given UIDs (mark as unread).
@@ -66,6 +68,7 @@ func (MockSession) Folders() ([]FolderInfo, error)        { return nil, nil }
 func (MockSession) Select(string) (SelectState, error)    { return SelectState{}, nil }
 func (MockSession) UIDs() ([]uint32, error)               { return nil, nil }
 func (MockSession) Fetch([]uint32) ([]RawMessage, error)  { return nil, nil }
+func (MockSession) Flags([]uint32) (map[uint32][]string, error) { return nil, nil }
 func (MockSession) MarkSeen([]uint32) error               { return nil }
 func (MockSession) MarkUnseen([]uint32) error             { return nil }
 func (MockSession) MoveTo([]uint32, string) error         { return nil }

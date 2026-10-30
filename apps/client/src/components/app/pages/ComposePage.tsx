@@ -23,7 +23,7 @@ import type {
   Recipient,
 } from "@/types"
 import { getMailService } from "@/services/serviceRegistry"
-import { isTauri } from "@/services/tauriMailService"
+import { isTauri, pickPath } from "@/services/tauriMailService"
 import { sendUndoSeconds } from "@/lib/settings"
 import { dateLocale, useT } from "@/lib/i18n"
 import {
@@ -270,10 +270,8 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
     }
     setPicking(true)
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog")
-      const picked = await open({ multiple: true, title: t("compose.attachDialogTitle") })
-      if (!picked) return
-      const paths = Array.isArray(picked) ? picked : [picked]
+      const paths = await pickPath("openMany", { title: t("compose.attachDialogTitle") })
+      if (paths.length === 0) return
       setFiles((prev) => {
         const seen = new Set(prev.map((f) => f.path))
         const next = [...prev]

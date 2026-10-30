@@ -37,6 +37,7 @@ import (
 	"mail/backend/internal/rule"
 	"mail/backend/internal/pgp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"mail/backend/internal/account"
@@ -96,7 +97,7 @@ type Server struct {
 	app     *App
 	outMu   sync.Mutex
 	out     io.Writer
-	offline bool // last known server reachability (connection.state transitions)
+	offline atomic.Bool // last known server reachability (connection.state transitions)
 }
 
 // Serve blocks reading requests from in and writing responses/events to out.
@@ -202,7 +203,24 @@ func (s *Server) handleLine(line []byte) {
 		s.writeLine(response{ID: req.ID, Error: "op sconosciuto: " + req.Op})
 		return
 	}
+	if slowOps[req.Op] {
+		// long network/AI ops must not hold up the stdin loop: every click
+		// would queue behind a 2-minute ai.chat. Fast ops stay in order.
+		go s.execute(req, handler)
+		return
+	}
+	s.execute(req, handler)
+}
 
+// slowOps run concurrently with other requests. Flag/move ops are not here:
+// their order matters (markRead then markUnread).
+var slowOps = map[string]bool{
+	"ai.chat": true, "send": true, "accounts.add": true, "sync.start": true,
+	"attachment.save": true, "attachment.text": true, "attachment.images": true, "attachment.preview": true,
+	"export.message": true, "export.mailbox": true, "import.mails": true,
+}
+
+func (s *Server) execute(req request, handler handler) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout(req.Op))
 	defer cancel()
 
@@ -1320,6 +1338,11 @@ func opSyncStart(ctx context.Context, app *App, params json.RawMessage) (any, er
 		if err := app.Engine.SyncAccountWith(accountID, syncPv); err != nil {
 			return // SyncAccountWith already emitted sync.error
 		}
+		// account removed during the sync (accounts.remove forgets the
+		// secret): do not open IDLE sessions for it
+		if _, ok := app.Secrets.Get(accountID); !ok {
+			return
+		}
 		// push watcher owns its own provider/session from here on
 		watchPv, werr := providerForAccount(app, &acc, sec.Expose())
 		if werr != nil {
@@ -1604,6 +1627,13 @@ func opDraftSave(_ context.Context, app *App, params json.RawMessage) (any, erro
 	from := domain.Recipient{Name: target.Name, Email: target.Email}
 	raw := smtp.Compose(from, p.Message)
 
+	// server copy of the previous version: replaced by this save
+	var oldUID uint64
+	if p.DraftID != "" {
+		if old, gerr := app.Messages.Get(p.DraftID); gerr == nil {
+			oldUID, _ = strconv.ParseUint(old.ProviderMessageID, 10, 32)
+		}
+	}
 	uid := ""
 	if draftsMailbox != "" {
 		secret, ok := app.Secrets.Get(target.ID)
@@ -1611,6 +1641,10 @@ func opDraftSave(_ context.Context, app *App, params json.RawMessage) (any, erro
 			if pv, perr := providerForAccount(app, target, secret.Expose()); perr == nil {
 				if u, aerr := pv.Append(draftsMailbox, raw, []string{"\\Draft", "\\Seen"}, time.Now()); aerr == nil && u > 0 {
 					uid = strconv.FormatUint(uint64(u), 10)
+					if oldUID > 0 {
+						// else the next Drafts sync brings the old version back
+						_ = pv.Delete(draftsMailbox, []uint32{uint32(oldUID)})
+					}
 				}
 				closeProvider(pv)
 			}
@@ -1635,12 +1669,14 @@ func opDraftSave(_ context.Context, app *App, params json.RawMessage) (any, erro
 	if err != nil {
 		return nil, fmt.Errorf("resolve thread: %w", err)
 	}
-	// re-saving an existing draft keeps its id and replaces the local row
+	// re-saving: a new server copy gets its UID-based id (the old id would
+	// point the next sync at the deleted UID); offline keeps the old id
 	if p.DraftID != "" {
-		if p.DraftID != msg.ID {
+		if uid == "" {
+			msg.ID = p.DraftID
+		} else if p.DraftID != msg.ID {
 			_ = app.Messages.DeleteFull(p.DraftID)
 		}
-		msg.ID = p.DraftID
 	}
 	if err := app.Messages.UpsertBatch([]domain.Message{msg}); err != nil {
 		return nil, fmt.Errorf("persist draft: %w", err)
@@ -2390,8 +2426,14 @@ func opImportMails(_ context.Context, app *App, params json.RawMessage) (any, er
 	if len(raws) == 0 {
 		return nil, fmt.Errorf("nessun messaggio riconosciuto nel file")
 	}
+	// continue after earlier imports: restarting at 1 would overwrite them
+	var maxUID uint32
+	if err := app.DB.QueryRow(`SELECT COALESCE(MAX(CAST(provider_msg_id AS INTEGER)),0) FROM messages WHERE folder=?`,
+		folderID).Scan(&maxUID); err != nil {
+		return nil, err
+	}
 	resolver := thread.NewResolver(app.DB)
-	imported, skipped, nextUID := 0, 0, uint32(1)
+	imported, skipped, nextUID := 0, 0, maxUID+1
 	for _, raw := range raws {
 		msg, perr := mime.Parse(raw)
 		if perr != nil {

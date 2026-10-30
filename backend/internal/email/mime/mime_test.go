@@ -39,3 +39,22 @@ func TestContentType(t *testing.T) {
 		t.Errorf("ct = %q", got)
 	}
 }
+
+// An unknown charset must not drop the message, nor the parts after it.
+func TestParseUnknownCharsetKeepsMessageAndParts(t *testing.T) {
+	raw := "Subject: Fattura\r\nFrom: a@b.c\r\nContent-Type: multipart/mixed; boundary=X\r\n\r\n" +
+		"--X\r\nContent-Type: text/plain; charset=unknown-8bit\r\n\r\nciao\r\n" +
+		"--X\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=f.pdf\r\n\r\n%PDF\r\n" +
+		"--X--\r\n"
+	m, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if m.Subject != "Fattura" || len(m.Attachments) != 1 || !strings.Contains(m.BodyText, "ciao") {
+		t.Fatalf("subject=%q atts=%d text=%q", m.Subject, len(m.Attachments), m.BodyText)
+	}
+	single := "Subject: Solo\r\nContent-Type: text/plain; charset=unknown-8bit\r\n\r\ntesto"
+	if _, err := Parse([]byte(single)); err != nil {
+		t.Fatalf("single-part unknown charset dropped: %v", err)
+	}
+}

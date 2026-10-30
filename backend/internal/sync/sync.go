@@ -247,6 +247,16 @@ func (e *Engine) syncFolder(accountID string, ref account.SyncRef, p provider.Ma
 		}
 	}
 
+	if len(fs.Flags) > 0 {
+		unread := make(map[string]bool, len(fs.Flags))
+		for uid, flags := range fs.Flags {
+			unread[messageID(accountID, ref.FolderID, uid)] = !hasFlag(flags, "\\Seen")
+		}
+		if err := e.messages.ApplyServerRead(ref.FolderID, unread); err != nil {
+			return err
+		}
+	}
+
 	highest := ref.LastUID
 	if ref.UIDValidity != 0 && fs.UIDValidity != ref.UIDValidity {
 		highest = 0 // folder was wiped above: the old high-water mark is meaningless

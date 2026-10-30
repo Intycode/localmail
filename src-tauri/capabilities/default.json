@@ -11,8 +11,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "shell:allow-open",
-    "dialog:allow-save",
-    "dialog:allow-open",
+    "dialog:allow-ask",
     "notification:default"
   ]
 }

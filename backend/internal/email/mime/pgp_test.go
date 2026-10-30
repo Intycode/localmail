@@ -10,7 +10,7 @@ import (
 )
 
 const clearsignedRaw = "Subject: Messaggio firmato\r\nFrom: Anna <anna@acme.dev>\r\n\r\n" +
-	"-----BEGIN PGP SIGNED MESSAGE-----\r\nHash: SHA512\r\n\r\nContenuto in chiaro firmato.\r\n" +
+	"-----BEGIN PGP SIGNED MESSAGE-----\r\nHash: SHA512\r\n\r\nContenuto in chiaro firmato. Tom & Jerry <bob@x.com>\r\n" +
 	"-----BEGIN PGP SIGNATURE-----\r\n\r\nFAKEARMOR\r\n-----END PGP SIGNATURE-----\r\n"
 
 const inlineEncryptedRaw = "Subject: Messaggio cifrato\r\nFrom: Anna <anna@acme.dev>\r\n\r\n" +
@@ -34,6 +34,10 @@ func TestParseClearsigned(t *testing.T) {
 	}
 	if !strings.Contains(m.Body, "-----BEGIN PGP SIGNED MESSAGE-----") {
 		t.Fatal("il blocco firmato deve restare in Body per la verifica")
+	}
+	// byte-exact: the HTML sanitizer must not escape the signed text
+	if !strings.Contains(m.Body, "Tom & Jerry <bob@x.com>") {
+		t.Fatalf("blocco firmato alterato: %q", m.Body)
 	}
 }
 

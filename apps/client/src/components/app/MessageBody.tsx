@@ -56,6 +56,8 @@ export function MessageBody({ message, whiteBg }: { message: Message; whiteBg: b
     // back Body = plain text when the mail has no HTML part: in that case
     // body === bodyText and we render text with preserved line breaks.
     if (text && body === text) return null
+    // PGP clearsigned: body keeps the armored block for verification only
+    if (body.startsWith("-----BEGIN PGP SIGNED MESSAGE-----")) return null
     const tags = [
       "p",
       "br",

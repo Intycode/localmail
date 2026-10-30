@@ -146,6 +146,10 @@ func drainPass(app *App) (processed int, offlineSeen bool) {
 			_ = app.Queue.Done(op.ID)
 			continue
 		}
+		// claim first: an op cancelled (undo-send) since the snapshot is skipped
+		if claimed, err := app.Queue.Claim(op.ID); err != nil || !claimed {
+			continue
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), opTimeout(op.Kind))
 		_, execErr := handler(ctx, app, json.RawMessage(op.Payload))
 		cancel()
@@ -165,10 +169,9 @@ func drainPass(app *App) (processed int, offlineSeen bool) {
 
 // setOnline emits connection.state on transitions only.
 func (s *Server) setOnline(online bool) {
-	if s.offline == !online {
+	if s.offline.Swap(!online) == !online {
 		return // no transition
 	}
-	s.offline = !online
 	if s.app.Events != nil {
 		s.app.Events.ConnectionState(online)
 	}
@@ -180,6 +183,9 @@ func (s *Server) startOutboxWorker(stop <-chan struct{}) {
 	go func() {
 		ticker := time.NewTicker(drainInterval)
 		defer ticker.Stop()
+		if s.app.Queue != nil {
+			_ = s.app.Queue.ReleaseClaims(time.Now())
+		}
 		s.drainOutbox()
 		for {
 			select {

@@ -14,8 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emersion/go-message/mail"
+	"github.com/emersion/go-message"
 	_ "github.com/emersion/go-message/charset" // registers charset decoders
+	"github.com/emersion/go-message/mail"
 
 	"mail/backend/internal/domain"
 )
@@ -29,7 +30,7 @@ func Parse(raw []byte) (domain.Message, error) {
 		return domain.Message{}, io.ErrUnexpectedEOF // oversized: rejected upstream too
 	}
 	reader, err := mail.CreateReader(bytes.NewReader(raw))
-	if err != nil {
+	if fatal(err) {
 		return domain.Message{}, err
 	}
 
@@ -121,9 +122,10 @@ func Parse(raw []byte) (domain.Message, error) {
 			m.SigStatus = "unknown"
 		}
 	}
-	if m.Body != "" && !m.IsEncrypted {
+	if m.Body != "" && m.Body == html {
 		// anti-tracking (M6): strip pixels + link trackers at ingest; count
-		// the remote images the UI will gate behind consent
+		// the remote images the UI will gate behind consent. Only the HTML
+		// part: escaping a clearsigned block would break its signature.
 		clean, remote := SanitizeHTML(m.Body)
 		m.Body = clean
 		m.RemoteImages = remote
@@ -153,7 +155,7 @@ func walkParts(r *mail.Reader, text, html *string, atts *[]domain.Attachment, en
 	}
 	for {
 		p, err := r.NextPart()
-		if err != nil {
+		if fatal(err) {
 			return
 		}
 		if ah, ok := p.Header.(*mail.AttachmentHeader); ok {
@@ -191,14 +193,14 @@ func walkParts(r *mail.Reader, text, html *string, atts *[]domain.Attachment, en
 			// is deferred (M9 verifies PGP/Inline clearsigns only)
 			*signedMIME = true
 			sub, err := mail.CreateReader(p.Body)
-			if err != nil {
+			if fatal(err) {
 				return
 			}
 			walkParts(sub, text, html, atts, encPayload, signedMIME, depth+1)
 		case strings.HasPrefix(ct, "multipart/"):
 			// nested multipart: recurse with a sub-reader
 			sub, err := mail.CreateReader(p.Body)
-			if err != nil {
+			if fatal(err) {
 				return
 			}
 			walkParts(sub, text, html, atts, encPayload, signedMIME, depth+1)
@@ -255,7 +257,7 @@ func splitMsgIDs(s string) []string {
 // never have to be persisted locally.
 func ExtractAttachment(raw []byte, name string) ([]byte, error) {
 	reader, err := mail.CreateReader(bytes.NewReader(raw))
-	if err != nil {
+	if fatal(err) {
 		return nil, fmt.Errorf("messaggio illeggibile: %w", err)
 	}
 	var found []byte
@@ -266,7 +268,7 @@ func ExtractAttachment(raw []byte, name string) ([]byte, error) {
 		}
 		for {
 			p, err := r.NextPart()
-			if err != nil {
+			if fatal(err) {
 				return
 			}
 			if ah, ok := p.Header.(*mail.AttachmentHeader); ok {
@@ -285,7 +287,7 @@ func ExtractAttachment(raw []byte, name string) ([]byte, error) {
 			ct := p.Header.Get("Content-Type")
 			if strings.HasPrefix(ct, "multipart/") {
 				sub, err := mail.CreateReader(p.Body)
-				if err != nil {
+				if fatal(err) {
 					return
 				}
 				walk(sub, depth+1)
@@ -327,4 +329,10 @@ func ContentType(h string) string {
 		return ""
 	}
 	return ct
+}
+// fatal reports whether a go-message error stops parsing. An unknown charset
+// or transfer encoding comes with a usable reader/part (raw bytes): dropping
+// it would lose the whole message, or every part after it.
+func fatal(err error) bool {
+	return err != nil && !message.IsUnknownCharset(err)
 }

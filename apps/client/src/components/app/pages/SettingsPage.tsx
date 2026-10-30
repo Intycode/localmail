@@ -33,7 +33,7 @@ import {
 import { getThemeMode, setThemeMode, type ThemeMode } from "@/lib/theme"
 import { dateLocale, getLocale, LOCALES, setLocale, useT, type Locale } from "@/lib/i18n"
 import { getMailService } from "@/services/serviceRegistry"
-import { isTauri, pgpService } from "@/services/tauriMailService"
+import { isTauri, pgpService, pickPath } from "@/services/tauriMailService"
 import { formatFolderName } from "@/lib/format"
 import { AISection } from "./SettingsAI"
 import { Badge } from "@/components/ui/badge"
@@ -313,13 +313,8 @@ function AutoBackupDirRow() {
     }
     setPicking(true)
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog")
-      const picked = await open({
-        directory: true,
-        multiple: false,
-        title: t("backup.dialogTitle"),
-      })
-      if (typeof picked === "string" && picked) {
+      const [picked] = await pickPath("folder", { title: t("backup.dialogTitle") })
+      if (picked) {
         setAutoBackupDir(picked)
         setDir(picked)
       }

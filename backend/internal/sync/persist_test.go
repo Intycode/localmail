@@ -263,3 +263,67 @@ func TestSyncUIDValidityResetsLastUID(t *testing.T) {
 		}
 	}
 }
+
+// A reply landing in another folder than the message it answers must get a
+// thread of its own folder, or it never shows in that folder's list.
+func TestReplyInOtherFolderStaysInItsFolder(t *testing.T) {
+	engine, _ := setupEngine(t)
+	p := &fakeProvider{folders: map[string]provider.FolderSync{
+		"f-inbox": {UIDValidity: 42, AllUIDs: []uint32{1}, Messages: []provider.RawMessage{
+			{UID: 1, Data: []byte(rawMsg1)},
+		}},
+		"f-archive": {UIDValidity: 7, AllUIDs: []uint32{1}, Messages: []provider.RawMessage{
+			{UID: 1, Data: []byte(rawMsg2)}, // In-Reply-To the inbox message
+		}},
+	}}
+	if err := engine.SyncAccountWith("a1", p); err != nil {
+		t.Fatal(err)
+	}
+	// whichever folder syncs first, each message's thread is in its own folder
+	rows, err := engine.db.Query(`SELECT m.folder, t.folder FROM messages m JOIN threads t ON t.id=m.thread`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mf, tf string
+		if err := rows.Scan(&mf, &tf); err != nil {
+			t.Fatal(err)
+		}
+		if mf != tf {
+			t.Fatalf("message in %q filed under thread of folder %q", mf, tf)
+		}
+	}
+}
+
+// Read on another device: the next incremental pass carries the server
+// flags and the local message, thread and badge follow.
+func TestSyncAppliesServerReadState(t *testing.T) {
+	engine, _ := setupEngine(t)
+	first := &fakeProvider{folders: map[string]provider.FolderSync{
+		"f-inbox": {UIDValidity: 42, AllUIDs: []uint32{1}, Messages: []provider.RawMessage{
+			{UID: 1, Data: []byte(rawMsg1)}, // no \Seen: unread
+		}},
+		"f-archive": {UIDValidity: 7},
+	}}
+	if err := engine.SyncAccountWith("a1", first); err != nil {
+		t.Fatal(err)
+	}
+	readElsewhere := &fakeProvider{folders: map[string]provider.FolderSync{
+		"f-inbox":   {UIDValidity: 42, AllUIDs: []uint32{1}, Flags: map[uint32][]string{1: {`\Seen`}}},
+		"f-archive": {UIDValidity: 7},
+	}}
+	if err := engine.SyncAccountWith("a1", readElsewhere); err != nil {
+		t.Fatal(err)
+	}
+	m, err := engine.messages.Get("m:a1:f-inbox:1")
+	if err != nil || m.IsUnread {
+		t.Fatalf("message still unread: %v", err)
+	}
+	var threadUnread, folderUnread int
+	_ = engine.db.QueryRow(`SELECT is_unread FROM threads WHERE id=?`, m.ThreadID).Scan(&threadUnread)
+	_ = engine.db.QueryRow(`SELECT unread FROM folders WHERE id='f-inbox'`).Scan(&folderUnread)
+	if threadUnread != 0 || folderUnread != 0 {
+		t.Fatalf("thread unread=%d folder badge=%d", threadUnread, folderUnread)
+	}
+}

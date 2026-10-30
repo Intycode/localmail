@@ -207,6 +207,25 @@ func (s *clientSession) Fetch(uids []uint32) ([]RawMessage, error) {
 	return out, nil
 }
 
+func (s *clientSession) Flags(uids []uint32) (map[uint32][]string, error) {
+	out := make(map[uint32][]string, len(uids))
+	if len(uids) == 0 {
+		return out, nil
+	}
+	msgs, err := s.c.Fetch(s.uidSet(uids), &imap.FetchOptions{UID: true, Flags: true}).Collect()
+	if err != nil {
+		return nil, fmt.Errorf("fetch flags: %v", err)
+	}
+	for _, m := range msgs {
+		flags := make([]string, 0, len(m.Flags))
+		for _, f := range m.Flags {
+			flags = append(flags, string(f))
+		}
+		out[uint32(m.UID)] = flags
+	}
+	return out, nil
+}
+
 func (s *clientSession) ensureSelected(mailbox string) error {
 	if s.current == mailbox {
 		return nil

@@ -44,8 +44,23 @@ async function engineInvoke<T>(op: string, params: Record<string, unknown> = {})
   return call<T>("engine_invoke", { op, params })
 }
 
-/** IOService — import/export/backup (M11). File paths come from the Tauri
- *  dialog plugin; the engine writes/reads them directly. */
+/** Native file dialog shown by Rust: the file-touching commands accept only
+ *  paths picked here (src-tauri/src/paths.rs), so a script injected through
+ *  a hostile email cannot name ~/.zshrc. Returns [] when cancelled. */
+export async function pickPath(
+  mode: "save" | "open" | "openMany" | "folder",
+  opts: {
+    defaultPath?: string
+    title?: string
+    filters?: { name: string; extensions: string[] }[]
+  } = {},
+): Promise<string[]> {
+  const res = await call<{ paths: string[] }>("pick_path", { mode, ...opts })
+  return res.paths
+}
+
+/** IOService — import/export/backup (M11). File paths come from pickPath;
+ *  the engine writes/reads them directly. */
 export const ioService = {
   async exportMessage(messageId: string, dest: string): Promise<{ path: string; size: number }> {
     return engineInvoke("export.message", { messageId, dest })
@@ -463,8 +478,7 @@ export async function exportAttachment(
     toast.info("Il salvataggio degli allegati richiede l'app desktop.")
     return null
   }
-  const { save } = await import("@tauri-apps/plugin-dialog")
-  const dest = await save({ defaultPath: name })
+  const [dest] = await pickPath("save", { defaultPath: name })
   if (!dest) return null
   const res = await call<{ path: string }>("attachment_export", {
     accountId,

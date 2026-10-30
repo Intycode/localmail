@@ -53,7 +53,8 @@ pub fn run() {
             pgp::pgp_import_private,
             pgp::pgp_delete,
             engine::backup_create,
-            engine::backup_restore
+            engine::backup_restore,
+            paths::pick_path
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Tauri app");
@@ -63,6 +64,7 @@ pub fn run() {
 
 mod engine;
 mod oauth;
+mod paths;
 mod pgp;
 mod secrets;
 

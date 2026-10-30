@@ -32,6 +32,9 @@ type FolderSync struct {
 	// Partial: AllUIDs covers only the fetched window (Graph), so it must
 	// not be used to reconcile deletions.
 	Partial bool
+	// Flags holds the current server flags of messages synced earlier
+	// (incremental IMAP passes): read on another device shows up here.
+	Flags map[uint32][]string
 }
 
 // RawMessage is an unparsed message plus its server UID and flags.

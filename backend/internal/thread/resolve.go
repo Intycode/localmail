@@ -19,7 +19,8 @@ func NewResolver(db *sql.DB) *Resolver { return &Resolver{db: db} }
 // Resolve returns the thread id for a message being persisted.
 //
 //  1. If the message references (or is referenced by) a known Message-ID in
-//     the same account, join that thread.
+//     the same folder, join that thread. Threads are folder-scoped: joining a
+//     Sent thread would hide an Inbox reply from the Inbox list.
 //  2. Otherwise group by normalized subject within the folder.
 func (r *Resolver) Resolve(accountID, folderID string, m *domain.Message) (string, error) {
 	ids := make([]string, 0, 1+len(m.InReplyTo)+len(m.References))
@@ -30,9 +31,9 @@ func (r *Resolver) Resolve(accountID, folderID string, m *domain.Message) (strin
 	ids = append(ids, m.References...)
 
 	if len(ids) > 0 {
-		q := `SELECT DISTINCT thread FROM messages WHERE account=? AND thread<>'' AND message_id IN (` + placeholders(len(ids)) + `)`
-		args := make([]any, 0, len(ids)+1)
-		args = append(args, accountID)
+		q := `SELECT DISTINCT thread FROM messages WHERE account=? AND folder=? AND thread<>'' AND message_id IN (` + placeholders(len(ids)) + `)`
+		args := make([]any, 0, len(ids)+2)
+		args = append(args, accountID, folderID)
 		for _, id := range ids {
 			args = append(args, id)
 		}

@@ -311,11 +311,10 @@ pub fn effective_secret(
     account_id: &str,
     password_secret: &str,
 ) -> Result<String, String> {
-    let marker = crate::secrets::entry_for(&format!("oauth/{}", account_id))?;
-    let cached: Value = match marker.get_password() {
-        Ok(json) => serde_json::from_str(&json).unwrap_or_else(|_| json!({})),
-        Err(keyring::Error::NoEntry) => return Ok(password_secret.to_string()),
-        Err(e) => return Err(format!("lettura keychain non riuscita: {}", e)),
+    let marker = format!("oauth/{}", account_id);
+    let cached: Value = match crate::secrets::get(&marker)? {
+        Some(json) => serde_json::from_str(&json).unwrap_or_else(|_| json!({})),
+        None => return Ok(password_secret.to_string()),
     };
 
     let expiry = cached.get("expiry").and_then(|x| x.as_u64()).unwrap_or(0);
@@ -355,9 +354,13 @@ pub fn effective_secret(
             (access, ttl)
         };
 
-    marker
-        .set_password(&json!({"access": access, "expiry": now_unix() + ttl}).to_string())
-        .map_err(|e| format!("scrittura keychain non riuscita: {}", e))?;
+    // keep "provider": without it the next refresh of a Microsoft account
+    // would be routed to Google and fail
+    crate::secrets::set(
+        &marker,
+        &json!({"access": access, "expiry": now_unix() + ttl, "provider": cached.get("provider")})
+            .to_string(),
+    )?;
     Ok(access)
 }
 

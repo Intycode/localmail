@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -155,8 +156,47 @@ func (s *Store) Failed(id string, opErr error, now time.Time) error {
 	return err
 }
 
-// Cancel removes one queued operation (user action from the outbox list).
-func (s *Store) Cancel(id string) error { return s.Done(id) }
+// running marks an op the worker is executing: it sorts after every RFC 3339
+// timestamp, so Due skips it and Cancel refuses it.
+const running = "9999"
+
+// ErrRunning is returned by Cancel for an op already being executed.
+var ErrRunning = errors.New("operazione già in corso: non è più annullabile")
+
+// Claim takes one due op for execution. False means it was cancelled (or
+// claimed) after the Due snapshot was taken: the caller must skip it.
+func (s *Store) Claim(id string) (bool, error) {
+	res, err := s.db.Exec(`UPDATE pending_ops SET next_attempt_at = ? WHERE id = ? AND next_attempt_at <> ?`,
+		running, id, running)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// ReleaseClaims requeues ops left claimed by an engine that stopped mid-run.
+func (s *Store) ReleaseClaims(now time.Time) error {
+	_, err := s.db.Exec(`UPDATE pending_ops SET next_attempt_at = ? WHERE next_attempt_at = ?`,
+		now.UTC().Format(time.RFC3339Nano), running)
+	return err
+}
+
+// Cancel removes one queued operation (user action from the outbox list,
+// undo-send). An op already claimed by the worker cannot be stopped.
+func (s *Store) Cancel(id string) error {
+	res, err := s.db.Exec(`DELETE FROM pending_ops WHERE id = ? AND next_attempt_at <> ?`, id, running)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		var exists int
+		if s.db.QueryRow(`SELECT 1 FROM pending_ops WHERE id = ?`, id).Scan(&exists) == nil {
+			return ErrRunning
+		}
+	}
+	return nil
+}
 
 func scanOps(rows *sql.Rows) ([]Op, error) {
 	var out []Op
