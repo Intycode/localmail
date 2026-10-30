@@ -9,6 +9,8 @@ import {
   Inbox,
   Mail,
   Mails,
+  PenLine,
+  Search,
   Send,
   Settings,
   ShieldAlert,
@@ -18,10 +20,12 @@ import {
 
 import { cn } from "@/lib/utils"
 import { formatFolderName } from "@/lib/format"
+import { routerStore } from "@/lib/router"
 import { useT } from "@/lib/i18n"
 import type { Account, Folder } from "@/types"
 import { AccountAvatar } from "@/components/app/AccountAvatar"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,6 +81,13 @@ export function AppSidebar({
   ...props
 }: AppSidebarProps) {
   const t = useT()
+  const route = React.useSyncExternalStore(
+    routerStore.subscribe,
+    () => routerStore.get().route.name,
+    () => "inbox",
+  )
+  // folder highlight only while a mail view is open, not on accounts/settings
+  const inMail = route === "inbox" || route === "thread"
   const activeAccount = accounts.find((a) => a.isActive) ?? accounts[0]
   // Unified view entry: meaningful only with more than one account. The badge
   // sums every account's inbox unread count.
@@ -95,6 +106,26 @@ export function AppSidebar({
             <AccountSwitcher accounts={accounts} active={activeAccount} />
           </SidebarMenuItem>
         </SidebarMenu>
+        {/* Compose + search live here on desktop (AppShell's topbar is mobile-only). */}
+        <div className="flex gap-1.5 px-0.5 pt-1">
+          <Button asChild className="flex-1">
+            <a href="/compose" aria-current={route === "compose" ? "page" : undefined}>
+              <PenLine data-icon="inline-start" />
+              {t("nav.compose")}
+            </a>
+          </Button>
+          <Button
+            asChild
+            variant={route === "search" ? "secondary" : "outline"}
+            size="icon"
+            aria-label={t("nav.search")}
+            title={t("nav.search")}
+          >
+            <a href="/search" aria-current={route === "search" ? "page" : undefined}>
+              <Search />
+            </a>
+          </Button>
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -130,7 +161,7 @@ export function AppSidebar({
               )}
               {folders.map((f) => {
                 const Icon = folderIcons[f.type] ?? FolderIcon
-                const active = f.id === activeFolderId
+                const active = inMail && f.id === activeFolderId
                 return (
                   <SidebarMenuItem key={f.id}>
                     <SidebarMenuButton asChild isActive={active} tooltip={formatFolderName(f.name)}>
@@ -154,16 +185,16 @@ export function AppSidebar({
         <SidebarSeparator />
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip={t("nav.accounts")}>
-              <a href="/accounts">
+            <SidebarMenuButton asChild isActive={route === "accounts"} tooltip={t("nav.accounts")}>
+              <a href="/accounts" aria-current={route === "accounts" ? "page" : undefined}>
                 <User />
                 <span>{t("nav.accounts")}</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip={t("nav.settings")}>
-              <a href="/settings">
+            <SidebarMenuButton asChild isActive={route === "settings"} tooltip={t("nav.settings")}>
+              <a href="/settings" aria-current={route === "settings" ? "page" : undefined}>
                 <Settings />
                 <span>{t("nav.settings")}</span>
               </a>

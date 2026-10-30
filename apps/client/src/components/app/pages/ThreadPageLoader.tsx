@@ -14,7 +14,14 @@ import { ThreadPage } from "./ThreadPage"
  * are static, so thread pages cannot be prerendered per id: this loader reads
  * the id from the query string and fetches thread + messages from the engine.
  */
-export function ThreadPageLoader({ threadId: threadIdProp }: { threadId?: string }) {
+export function ThreadPageLoader({
+  threadId: threadIdProp,
+  embedded,
+}: {
+  threadId?: string
+  /** rendered inside the inbox reading pane (no back button) */
+  embedded?: boolean
+}) {
   const t = useT()
   const [data, setData] = React.useState<{
     thread: Thread
@@ -100,6 +107,7 @@ export function ThreadPageLoader({ threadId: threadIdProp }: { threadId?: string
       messages={data.messages}
       isDraft={data.isDraft}
       folderType={data.folderType}
+      embedded={embedded}
     />
   )
 }

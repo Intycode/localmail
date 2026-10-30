@@ -33,7 +33,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -43,7 +42,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { PageBody, PageHeader } from "../PageHeader"
 import { MessageBody } from "@/components/app/MessageBody"
 import { whiteMessageBackground } from "@/lib/settings"
 import {
@@ -84,6 +82,7 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
   )
   const [to, setTo] = React.useState("")
   const [cc, setCc] = React.useState("")
+  const [showCc, setShowCc] = React.useState(false)
   const [subject, setSubject] = React.useState("")
   const [body, setBody] = React.useState("")
   const [sending, setSending] = React.useState(false)
@@ -409,6 +408,9 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
     window.location.href = "/"
   }
 
+  // Cc stays one click away unless it already has content (reply-all, drafts)
+  const ccOpen = showCc || cc !== ""
+
   const title = replyRef.current
     ? t("compose.replyTitle")
     : draftIdRef.current
@@ -416,18 +418,17 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
       : t("compose.newTitle")
 
   return (
-    <PageBody>
-      <PageHeader
-        title={title}
-        description={
-          canSend ? t("compose.description", { account: from || "—" }) : t("compose.needAccount")
-        }
-      />
-      <FieldGroup>
-        <Field orientation="horizontal">
-          <FieldLabel htmlFor="c-from" className="w-16 shrink-0">
-            {t("compose.from")}
-          </FieldLabel>
+    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-6">
+      <div className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
+        <header className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-border px-5 py-3.5">
+          <h1 className="text-base font-semibold">{title}</h1>
+          <p className="min-w-0 truncate text-xs text-muted-foreground">
+            {canSend
+              ? t("compose.description", { account: from || "—" })
+              : t("compose.needAccount")}
+          </p>
+        </header>
+        <ComposeRow id="c-from" label={t("compose.from")}>
           {canSend ? (
             <Select
               value={from}
@@ -436,7 +437,10 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
                 markDirty()
               }}
             >
-              <SelectTrigger id="c-from" className="w-full">
+              <SelectTrigger
+                id="c-from"
+                className="h-11 w-full border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+              >
                 <SelectValue placeholder={t("compose.fromPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
@@ -448,18 +452,21 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
               </SelectContent>
             </Select>
           ) : (
-            <Input id="c-from" value={from} placeholder={t("compose.noAccount")} disabled />
+            <Input
+              id="c-from"
+              value={from}
+              placeholder={t("compose.noAccount")}
+              disabled
+              className="h-11 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+            />
           )}
-        </Field>
+        </ComposeRow>
         <datalist id="contacts-suggestions">
           {contacts.map((c) => (
             <option key={c.email} value={c.email} label={c.name || c.email} />
           ))}
         </datalist>
-        <Field orientation="horizontal">
-          <FieldLabel htmlFor="c-to" className="w-16 shrink-0">
-            {t("compose.to")}
-          </FieldLabel>
+        <ComposeRow id="c-to" label={t("compose.to")}>
           <Input
             id="c-to"
             value={to}
@@ -471,28 +478,31 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
             list="contacts-suggestions"
             autoComplete="off"
             autoFocus
+            className="h-11 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
-        </Field>
-        <Field orientation="horizontal">
-          <FieldLabel htmlFor="c-cc" className="w-16 shrink-0">
-            {t("compose.cc")}
-          </FieldLabel>
-          <Input
-            id="c-cc"
-            value={cc}
-            onChange={(e) => {
-              setCc(e.target.value)
-              markDirty()
-            }}
-            placeholder={t("compose.ccPlaceholder")}
-            list="contacts-suggestions"
-            autoComplete="off"
-          />
-        </Field>
-        <Field orientation="horizontal">
-          <FieldLabel htmlFor="c-subject" className="w-16 shrink-0">
-            {t("compose.subject")}
-          </FieldLabel>
+          {!ccOpen && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setShowCc(true)}>
+              {t("compose.cc")}
+            </Button>
+          )}
+        </ComposeRow>
+        {ccOpen && (
+          <ComposeRow id="c-cc" label={t("compose.cc")}>
+            <Input
+              id="c-cc"
+              value={cc}
+              onChange={(e) => {
+                setCc(e.target.value)
+                markDirty()
+              }}
+              placeholder={t("compose.ccPlaceholder")}
+              list="contacts-suggestions"
+              autoComplete="off"
+              className="h-11 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+            />
+          </ComposeRow>
+        )}
+        <ComposeRow id="c-subject" label={t("compose.subject")}>
           <Input
             id="c-subject"
             value={subject}
@@ -501,29 +511,28 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
               markDirty()
             }}
             placeholder={t("compose.subjectPlaceholder")}
+            className="h-11 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent text-[15px] font-medium"
           />
-        </Field>
-        <Field orientation="horizontal">
-          <FieldLabel htmlFor="c-body" className="w-16 shrink-0">
-            {t("compose.body")}
-          </FieldLabel>
-          <Textarea
-            id="c-body"
-            value={body}
-            onChange={(e) => {
-              setBody(e.target.value)
-              markDirty()
-            }}
-            placeholder={t("compose.bodyPlaceholder")}
-            className="min-h-52"
-          />
-        </Field>
+        </ComposeRow>
+        <label htmlFor="c-body" className="sr-only">
+          {t("compose.body")}
+        </label>
+        <Textarea
+          id="c-body"
+          value={body}
+          onChange={(e) => {
+            setBody(e.target.value)
+            markDirty()
+          }}
+          placeholder={t("compose.bodyPlaceholder")}
+          className="min-h-64 flex-1 resize-none rounded-none border-0 bg-transparent px-5 py-4 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 dark:bg-transparent"
+        />
         {quoteCtx && quotePreview && (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 px-5 pb-3">
             <Button
               variant="ghost"
               size="sm"
-              className="-ml-2 self-start"
+              className="-ml-2 self-start text-muted-foreground"
               onClick={() => setShowQuote(!showQuote)}
               aria-expanded={showQuote}
             >
@@ -542,14 +551,14 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
           </div>
         )}
         {files.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 px-5 pb-3">
             {files.map((f) => (
               <span
                 key={f.path}
-                className="inline-flex max-w-64 items-center gap-1 rounded-md border bg-muted/40 px-2 py-1 text-xs"
+                className="inline-flex max-w-64 items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"
                 title={f.path}
               >
-                <Paperclip className="size-3 shrink-0" />
+                <Paperclip className="size-3 shrink-0 text-muted-foreground" />
                 <span className="truncate">{f.name ?? f.path}</span>
                 <button
                   type="button"
@@ -563,11 +572,43 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
             ))}
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        <footer className="flex flex-wrap items-center gap-2 border-t border-border bg-muted/30 px-5 py-3">
+          <div className="flex">
+            <Button
+              className="rounded-r-none"
+              onClick={() => void send()}
+              disabled={!canSend || sending || !contextLoaded}
+            >
+              <Send data-icon="inline-start" />
+              {sending ? t("compose.sending") : t("compose.send")}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  className="rounded-l-none border-l border-primary-foreground/25"
+                  disabled={!canSend || sending || !contextLoaded}
+                  aria-label={t("compose.schedule")}
+                  title={t("compose.schedule")}
+                >
+                  <Clock />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {schedulePresets.map((p) => (
+                  <DropdownMenuItem
+                    key={p.label}
+                    onClick={() => void send({ sendAt: new Date(Date.now() + p.ms).toISOString() })}
+                  >
+                    {p.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <Button
             type="button"
-            variant="outline"
-            size="sm"
+            variant="ghost"
             onClick={() => void attach()}
             disabled={picking}
             title={t("compose.attachTitle")}
@@ -579,7 +620,7 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
             <>
               <Button
                 type="button"
-                variant={sign ? "default" : "outline"}
+                variant={sign ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => setSign(!sign)}
                 aria-pressed={sign}
@@ -590,7 +631,7 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
               </Button>
               <Button
                 type="button"
-                variant={encrypt ? "default" : "outline"}
+                variant={encrypt ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => setEncrypt(!encrypt)}
                 aria-pressed={encrypt}
@@ -604,47 +645,48 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
               </Button>
             </>
           )}
-          <Button onClick={() => void send()} disabled={!canSend || sending || !contextLoaded}>
-            <Send data-icon="inline-start" />
-            {sending ? t("compose.sending") : t("compose.send")}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                disabled={!canSend || sending || !contextLoaded}
-                aria-label={t("compose.schedule")}
-                title={t("compose.schedule")}
-              >
-                <Clock data-icon="inline-start" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {schedulePresets.map((p) => (
-                <DropdownMenuItem
-                  key={p.label}
-                  onClick={() => void send({ sendAt: new Date(Date.now() + p.ms).toISOString() })}
-                >
-                  {p.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <span className="flex-1" />
           <Button
-            variant="outline"
+            variant="ghost"
             onClick={() => void saveDraftNow(false)}
             disabled={!canSend || savingDraft || !contextLoaded}
           >
             <Save data-icon="inline-start" />
             {savingDraft ? t("compose.savingDraft") : t("compose.saveDraft")}
           </Button>
-          <Button variant="destructive" onClick={() => void discard()}>
-            <Trash2 data-icon="inline-start" />
-            {t("compose.discard")}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-destructive hover:text-destructive"
+            onClick={() => void discard()}
+            aria-label={t("compose.discard")}
+            title={t("compose.discard")}
+          >
+            <Trash2 />
           </Button>
-        </div>
-      </FieldGroup>
-    </PageBody>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+/** One header line of the composer: fixed-width label + borderless control. */
+function ComposeRow({
+  id,
+  label,
+  children,
+}: {
+  id: string
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border/70 px-5 focus-within:shadow-[inset_0_-2px_0_var(--ring)]">
+      <label htmlFor={id} className="w-16 shrink-0 text-sm text-muted-foreground">
+        {label}
+      </label>
+      {children}
+    </div>
   )
 }
 

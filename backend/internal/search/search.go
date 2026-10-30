@@ -136,7 +136,7 @@ func ftsTerm(q string) string {
 			continue
 		}
 		for _, tok := range tokenize(part.text) {
-			terms = append(terms, tok+"*")
+			terms = append(terms, `"`+tok+`"*`) // quoted: AND/OR/NOT stay plain words
 		}
 	}
 	if len(terms) == 0 {

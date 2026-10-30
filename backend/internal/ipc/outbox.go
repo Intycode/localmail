@@ -110,10 +110,7 @@ func (s *Server) enqueueFailedOp(op string, params json.RawMessage) bool {
 	if accountID == "" {
 		return false
 	}
-	payload := params
-	if len(payload) == 0 {
-		payload = json.RawMessage("{}")
-	}
+	payload := stripSecret(params)
 	if _, err := app.Queue.Enqueue(accountID, op, payload); err != nil {
 		return false
 	}
@@ -254,4 +251,19 @@ func opOutboxDrain(_ context.Context, _ *App, _ json.RawMessage) (any, error) {
 	default: // a pass is already pending
 	}
 	return map[string]bool{"queued": true}, nil
+}
+
+// stripSecret drops the "secret" param before an op is persisted: secrets
+// live only in the keychain and the runtime vault, never in pending_ops.
+func stripSecret(params json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(params, &m) != nil || m == nil {
+		return json.RawMessage("{}")
+	}
+	delete(m, "secret")
+	out, err := json.Marshal(m)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	return out
 }

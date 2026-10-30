@@ -1419,6 +1419,7 @@ func opSend(_ context.Context, app *App, params json.RawMessage) (any, error) {
 			if app.Queue == nil {
 				return nil, fmt.Errorf("coda di invio non disponibile")
 			}
+			p.Secret = "" // never persisted: the replay reads the runtime vault
 			payload, merr := json.Marshal(p)
 			if merr != nil {
 				return nil, merr

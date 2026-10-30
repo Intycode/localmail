@@ -89,6 +89,8 @@ export function installRouter(): void {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
       const anchor = (e.target as HTMLElement | null)?.closest<HTMLAnchorElement>("a[href]")
       if (!anchor || anchor.target === "_blank") return
+      // inbox rows on desktop open the reading pane via their own onClick
+      if (anchor.hasAttribute("data-pane-link")) return
       const url = new URL(anchor.href, window.location.origin)
       if (url.origin !== window.location.origin || !ROUTES.has(cleanPath(url.pathname))) return
       e.preventDefault()

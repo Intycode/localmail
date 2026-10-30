@@ -88,8 +88,10 @@ func Address(c Config) string {
 // DefaultFor derives a sensible SMTP configuration from the IMAP one:
 // smtp.<imap-host>:465 with implicit TLS and the same username.
 func DefaultFor(imapHost, username string) Config {
+	// strip the first label only when a domain remains: posteo.de -> smtp.de
+	// would hand the password to an unrelated server, so keep the IMAP host
 	host := imapHost
-	if i := strings.Index(host, "."); i > 0 {
+	if i := strings.Index(host, "."); i > 0 && strings.Contains(host[i+1:], ".") {
 		host = "smtp." + host[i+1:]
 	}
 	return Config{Host: host, Port: 465, Security: SecurityTLS, Username: username}

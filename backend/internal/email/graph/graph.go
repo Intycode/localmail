@@ -214,7 +214,7 @@ func (p *Provider) SyncFolder(ref provider.FolderRef) (provider.FolderSync, erro
 		return provider.FolderSync{}, err
 	}
 
-	out := provider.FolderSync{UIDValidity: 1}
+	out := provider.FolderSync{UIDValidity: 1, Partial: true}
 	for i := len(msgs) - 1; i >= 0; i-- { // ascending UID order
 		m := msgs[i]
 		uid, uerr := epochOf(m.ReceivedDateTime)

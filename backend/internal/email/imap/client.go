@@ -277,6 +277,14 @@ func (s *clientSession) Delete(uids []uint32) error {
 	if err := s.c.Store(s.uidSet(uids), store, nil).Close(); err != nil {
 		return fmt.Errorf("store deleted: %v", err)
 	}
+	// UID EXPUNGE removes only these UIDs; a plain EXPUNGE would also erase
+	// messages another client merely marked \Deleted
+	if s.c.Caps().Has(imap.CapUIDPlus) {
+		if err := s.c.UIDExpunge(s.uidSet(uids)).Close(); err != nil {
+			return fmt.Errorf("uid expunge: %v", err)
+		}
+		return nil
+	}
 	if err := s.c.Expunge().Close(); err != nil {
 		return fmt.Errorf("expunge: %v", err)
 	}

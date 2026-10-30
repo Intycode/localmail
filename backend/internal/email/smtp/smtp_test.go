@@ -298,4 +298,8 @@ func TestDefaultFor(t *testing.T) {
 	if d.Username != "luca@posta.example" {
 		t.Fatalf("username not carried over: %+v", d)
 	}
+	// a bare domain must not become smtp.<tld> (credentials to a stranger)
+	if d := DefaultFor("posteo.de", "u"); d.Host != "posteo.de" {
+		t.Fatalf("bare domain rewritten: %+v", d)
+	}
 }

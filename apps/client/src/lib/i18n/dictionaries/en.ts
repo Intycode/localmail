@@ -70,6 +70,10 @@ export const en: Record<string, string> = {
   "inbox.noSubject": "(no subject)",
   "inbox.archived": "Archived",
   "inbox.archiveFailed": "Archiving failed",
+  "inbox.unreadCount": "{n} unread",
+  "inbox.allRead": "All caught up",
+  "inbox.selectThread": "Select a message",
+  "inbox.selectThreadDesc": "It opens here, without leaving the list.",
 
   // --- thread ---
   "thread.markedRead": "Marked as read",
@@ -213,6 +217,7 @@ export const en: Record<string, string> = {
   "search.matchRecipient": "recipient",
   "search.matchBody": "body",
   "search.matchSemantic": "similar to",
+  "search.resultCount": "{n} results",
 
   // --- accounts ---
   "accounts.title": "Accounts",
@@ -366,11 +371,17 @@ export const en: Record<string, string> = {
   "onboarding.doneArchive": "archive the conversation",
   "onboarding.doneSettings": "Theme, notifications and backup live in Settings.",
   "onboarding.openMail": "Open your mail",
+  "onboarding.steps": "Steps",
+  "onboarding.stepWelcome": "Welcome",
+  "onboarding.stepAccount": "Account",
+  "onboarding.stepSync": "Sync",
+  "onboarding.stepDone": "Ready",
 
   // --- settings ---
   "settings.title": "Settings",
   "settings.description": "Speed and privacy first. Everything stays on your device.",
   "settings.autoSaved": "Changes are saved automatically.",
+  "settings.sections": "Settings sections",
   "settings.general": "General",
   "settings.syncOnStart": "Sync on startup",
   "settings.syncOnStartDesc": "Sync in the background on launch, without blocking the UI.",

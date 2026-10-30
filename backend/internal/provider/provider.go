@@ -29,6 +29,9 @@ type FolderSync struct {
 	// AllUIDs is the complete UID list of the folder, used to reconcile
 	// server-side deletions locally.
 	AllUIDs []uint32
+	// Partial: AllUIDs covers only the fetched window (Graph), so it must
+	// not be used to reconcile deletions.
+	Partial bool
 }
 
 // RawMessage is an unparsed message plus its server UID and flags.

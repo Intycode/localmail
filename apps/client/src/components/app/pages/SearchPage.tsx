@@ -2,13 +2,13 @@ import * as React from "react"
 import { Search, Sparkles } from "lucide-react"
 
 import { formatDate } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n"
 import { getMailService } from "@/services/serviceRegistry"
 import { isTauri, semanticSearchService } from "@/services/tauriMailService"
 import type { SearchResult } from "@/types"
 import { ThreadContextMenu } from "@/components/app/ThreadContextMenu"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 
@@ -35,7 +35,10 @@ function HighlightedSnippet({ text }: { text: string }) {
     } else if (part !== "") {
       out.push(
         bold ? (
-          <mark key={key++} className="bg-transparent font-semibold text-foreground">
+          <mark
+            key={key++}
+            className="rounded-sm bg-amber-200/70 px-0.5 text-foreground dark:bg-amber-400/25"
+          >
             {part}
           </mark>
         ) : (
@@ -92,89 +95,99 @@ export function SearchPage() {
   }, [query, mode])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-border px-4 py-3">
-        <div className="mx-auto w-full max-w-xl">
-          <InputGroup className="h-9">
+    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-5 pt-8 pb-10">
+        <h1 className="text-xl font-semibold tracking-tight">{t("search.title")}</h1>
+        <div className="flex flex-col gap-3">
+          <InputGroup className="h-12 rounded-xl">
             <InputGroupInput
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("search.placeholder")}
+              aria-label={t("search.title")}
+              className="text-base"
               autoFocus
             />
             <InputGroupAddon align="inline-start">
               <Search />
             </InputGroupAddon>
           </InputGroup>
-          {semanticReady && (
-            <div className="mt-2 flex items-center gap-1.5">
-              <Button
-                variant={mode === "keyword" ? "default" : "outline"}
-                size="xs"
-                onClick={() => setMode("keyword")}
-              >
-                {t("search.keyword")}
-              </Button>
-              <Button
-                variant={mode === "semantic" ? "default" : "outline"}
-                size="xs"
-                onClick={() => setMode("semantic")}
-              >
-                <Sparkles data-icon="inline-start" />
-                {t("search.semantic")}
-              </Button>
+          {(semanticReady || results !== null) && (
+            <div className="flex flex-wrap items-center gap-3">
+              {semanticReady && (
+                <div role="group" className="inline-flex rounded-lg bg-muted p-1">
+                  {(["keyword", "semantic"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={mode === m}
+                      onClick={() => setMode(m)}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[13px] text-muted-foreground transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                        mode === m && "bg-background font-medium text-foreground shadow-sm",
+                      )}
+                    >
+                      {m === "semantic" && <Sparkles className="size-3.5" />}
+                      {m === "keyword" ? t("search.keyword") : t("search.semantic")}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {results !== null && results.length > 0 && (
+                <span className="text-[13px] text-muted-foreground">
+                  {t("search.resultCount", { n: results.length })}
+                </span>
+              )}
             </div>
           )}
         </div>
-      </div>
 
-      {results === null ? (
-        <SearchHint>{t("search.hint")}</SearchHint>
-      ) : results.length === 0 ? (
-        <SearchHint>{t("search.noResults", { query: query.trim() })}</SearchHint>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-          {results.map((h) => (
-            <ThreadContextMenu
-              key={`${h.threadId}-${h.date}`}
-              thread={null}
-              threadId={h.threadId}
-              onRemoved={() =>
-                setResults((prev) =>
-                  prev === null
-                    ? prev
-                    : prev.filter((x) => x.threadId !== h.threadId || x.date !== h.date),
-                )
-              }
-            >
-              <a
-                href={`/thread?id=${encodeURIComponent(h.threadId)}`}
-                data-thread-row
-                className="grid grid-cols-[1fr_auto] items-start gap-4 border-b border-border px-4 py-3 outline-none hover:bg-accent focus-visible:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        {results === null ? (
+          <SearchHint>{t("search.hint")}</SearchHint>
+        ) : results.length === 0 ? (
+          <SearchHint>{t("search.noResults", { query: query.trim() })}</SearchHint>
+        ) : (
+          <div className="border-t border-border">
+            {results.map((h) => (
+              <ThreadContextMenu
+                key={`${h.threadId}-${h.date}`}
+                thread={null}
+                threadId={h.threadId}
+                onRemoved={() =>
+                  setResults((prev) =>
+                    prev === null
+                      ? prev
+                      : prev.filter((x) => x.threadId !== h.threadId || x.date !== h.date),
+                  )
+                }
               >
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{h.subject}</span>
-                  <span className="block truncate text-[13px] text-muted-foreground">
+                <a
+                  href={`/thread?id=${encodeURIComponent(h.threadId)}`}
+                  data-thread-row
+                  className="flex flex-col gap-1 border-b border-border px-2 py-3.5 outline-none hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate font-medium">{h.subject}</span>
+                    <Badge
+                      variant="outline"
+                      className="font-mono text-[10px] font-normal text-muted-foreground"
+                    >
+                      {h.matchedOn in matchedOnKeys ? t(matchedOnKeys[h.matchedOn]) : h.matchedOn}
+                    </Badge>
+                    <time className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {formatDate(h.date)}
+                    </time>
+                  </span>
+                  <span className="truncate text-[13px] text-muted-foreground">
                     <HighlightedSnippet text={h.snippet} />
                   </span>
-                </span>
-                <span className="flex shrink-0 flex-col items-end gap-1">
-                  <time className="text-xs tabular-nums text-muted-foreground">
-                    {formatDate(h.date)}
-                  </time>
-                  <Badge
-                    variant="outline"
-                    className="font-mono text-[10px] font-normal text-muted-foreground"
-                  >
-                    {h.matchedOn in matchedOnKeys ? t(matchedOnKeys[h.matchedOn]) : h.matchedOn}
-                  </Badge>
-                </span>
-              </a>
-            </ThreadContextMenu>
-          ))}
-        </div>
-      )}
+                </a>
+              </ThreadContextMenu>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -182,7 +195,7 @@ export function SearchPage() {
 function SearchHint({ children }: { children: React.ReactNode }) {
   const t = useT()
   return (
-    <div className="flex flex-1 items-center justify-center p-8">
+    <div className="flex items-center justify-center py-12">
       <Empty>
         <EmptyHeader>
           <EmptyMedia variant="icon">

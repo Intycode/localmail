@@ -36,6 +36,9 @@ const (
 // attempt budget is exhausted (after maxAttempts the item parks for one hour
 // per try instead of hammering the network forever).
 func Backoff(attempts int) time.Duration {
+	if attempts >= MaxAttempts {
+		return maxDelay // also guards the shift below against int64 overflow
+	}
 	d := baseDelay << attempts // attempts is 0-based here: first retry 30s
 	if d > maxDelay {
 		d = maxDelay

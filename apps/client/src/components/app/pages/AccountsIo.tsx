@@ -157,7 +157,7 @@ export function AccountsIo({ accounts }: { accounts: Account[] }): React.JSX.Ele
   }
 
   return (
-    <Card size="sm">
+    <Card size="sm" className="mt-8">
       <CardHeader>
         <CardTitle>{t("io.title")}</CardTitle>
         <CardDescription>{t("io.description")}</CardDescription>

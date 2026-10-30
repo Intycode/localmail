@@ -96,6 +96,10 @@ export function OnboardingWizard({ onClose }: OnboardingWizardProps) {
             : "gap-4 p-6",
         )}
       >
+        <StepBar
+          step={step}
+          className={step === "connect" || step === "sync" ? "px-6 pt-5" : undefined}
+        />
         {step === "welcome" && <WelcomeStep onStart={() => setStep("connect")} onSkip={dismiss} />}
         {step === "connect" && (
           <ConnectStep
@@ -115,6 +119,43 @@ export function OnboardingWizard({ onClose }: OnboardingWizardProps) {
         {step === "done" && <DoneStep onFinish={finish} />}
       </DialogContent>
     </Dialog>
+  )
+}
+
+const STEPS: { step: Step; labelKey: string }[] = [
+  { step: "welcome", labelKey: "onboarding.stepWelcome" },
+  { step: "connect", labelKey: "onboarding.stepAccount" },
+  { step: "sync", labelKey: "onboarding.stepSync" },
+  { step: "done", labelKey: "onboarding.stepDone" },
+]
+
+/** Four-segment progress bar: where the user is in the first-run flow. */
+function StepBar({ step, className }: { step: Step; className?: string }) {
+  const t = useT()
+  const current = STEPS.findIndex((s) => s.step === step)
+  return (
+    <ol
+      aria-label={t("onboarding.steps")}
+      className={cn("grid shrink-0 grid-cols-4 gap-2", className)}
+    >
+      {STEPS.map((s, i) => (
+        <li
+          key={s.step}
+          aria-current={i === current ? "step" : undefined}
+          className="flex flex-col gap-1.5"
+        >
+          <span className={cn("h-1 rounded-full", i <= current ? "bg-primary" : "bg-border")} />
+          <span
+            className={cn(
+              "truncate text-[11px]",
+              i === current ? "font-semibold text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {t(s.labelKey)}
+          </span>
+        </li>
+      ))}
+    </ol>
   )
 }
 

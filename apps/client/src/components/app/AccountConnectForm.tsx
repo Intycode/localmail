@@ -614,7 +614,9 @@ const emptyForm: FormState = {
 /** Derives the precompiled SMTP defaults from the IMAP form values. */
 function smtpDefaults(f: FormState): Partial<FormState> {
   const host = f.host.trim()
-  const derived = host.includes(".") ? `smtp.${host.slice(host.indexOf(".") + 1)}` : `smtp.${host}`
+  // same rule as the engine's smtp.DefaultFor: posteo.de stays posteo.de, never smtp.de
+  const rest = host.slice(host.indexOf(".") + 1)
+  const derived = host.indexOf(".") > 0 && rest.includes(".") ? `smtp.${rest}` : host
   return {
     smtpHost: f.smtpHost || derived,
     smtpPort: f.smtpPort || "465",

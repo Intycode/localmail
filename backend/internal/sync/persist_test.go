@@ -206,3 +206,60 @@ func TestSyncHandlesUIDValidityChange(t *testing.T) {
 		t.Errorf("after uidvalidity change, message = %q, want replaced content", m.Subject)
 	}
 }
+// Graph returns only the new messages: an empty partial window must not
+// be read as "the server deleted everything".
+func TestSyncPartialWindowKeepsLocalMail(t *testing.T) {
+	engine, _ := setupEngine(t)
+	full := &fakeProvider{folders: map[string]provider.FolderSync{
+		"f-inbox": {UIDValidity: 1, AllUIDs: []uint32{1}, Messages: []provider.RawMessage{
+			{UID: 1, Data: []byte(rawMsg1)},
+		}},
+		"f-archive": {UIDValidity: 7},
+	}}
+	if err := engine.SyncAccountWith("a1", full); err != nil {
+		t.Fatalf("sync 1: %v", err)
+	}
+	empty := &fakeProvider{folders: map[string]provider.FolderSync{
+		"f-inbox":   {UIDValidity: 1, Partial: true},
+		"f-archive": {UIDValidity: 7},
+	}}
+	if err := engine.SyncAccountWith("a1", empty); err != nil {
+		t.Fatalf("sync 2: %v", err)
+	}
+	if _, err := engine.messages.Get("m:a1:f-inbox:1"); err != nil {
+		t.Errorf("partial sync deleted local mail: %v", err)
+	}
+}
+
+// After a UIDVALIDITY reset the high-water mark must restart, or every
+// later incremental fetch asks for UIDs above the old, now-meaningless max.
+func TestSyncUIDValidityResetsLastUID(t *testing.T) {
+	engine, _ := setupEngine(t)
+	old := &fakeProvider{folders: map[string]provider.FolderSync{
+		"f-inbox": {UIDValidity: 42, AllUIDs: []uint32{500}, Messages: []provider.RawMessage{
+			{UID: 500, Data: []byte(rawMsg1)},
+		}},
+		"f-archive": {UIDValidity: 7},
+	}}
+	if err := engine.SyncAccountWith("a1", old); err != nil {
+		t.Fatalf("sync 1: %v", err)
+	}
+	reset := &fakeProvider{folders: map[string]provider.FolderSync{
+		"f-inbox": {UIDValidity: 43, AllUIDs: []uint32{3}, Messages: []provider.RawMessage{
+			{UID: 3, Data: []byte(rawMsg3)},
+		}},
+		"f-archive": {UIDValidity: 7},
+	}}
+	if err := engine.SyncAccountWith("a1", reset); err != nil {
+		t.Fatalf("sync 2: %v", err)
+	}
+	refs, err := engine.accounts.SyncRefs("a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range refs {
+		if r.FolderID == "f-inbox" && r.LastUID != 3 {
+			t.Fatalf("LastUID = %d after reset, want 3", r.LastUID)
+		}
+	}
+}

@@ -20,7 +20,7 @@ import { toast } from "sonner"
 
 import { navigate } from "@/lib/router"
 import { cn } from "@/lib/utils"
-import { formatBytes, formatDate } from "@/lib/format"
+import { formatBytes, formatDate, initials } from "@/lib/format"
 import { snoozePresets } from "@/lib/snooze"
 import { setWhiteMessageBackground, whiteMessageBackground } from "@/lib/settings"
 import { dateLocale, t, useT } from "@/lib/i18n"
@@ -51,14 +51,18 @@ interface ThreadPageProps {
   isDraft?: boolean
   /** type of the folder the thread lives in: switches the spam actions */
   folderType?: string
+  /** rendered inside the inbox reading pane (no back button) */
+  embedded?: boolean
 }
 
 /** ThreadPage — a single thread: header with compact actions, then messages. */
-export function ThreadPage({ thread, messages, isDraft, folderType }: ThreadPageProps) {
+export function ThreadPage({ thread, messages, isDraft, folderType, embedded }: ThreadPageProps) {
   const t = useT()
   const [busy, setBusy] = React.useState(false)
   const [whiteBg, setWhiteBg] = React.useState(whiteMessageBackground)
   const last = messages[messages.length - 1]
+  // earlier messages start collapsed to one line; the latest is open
+  const [openIds, setOpenIds] = React.useState(() => new Set(last ? [last.id] : []))
 
   function toggleWhiteBg(): void {
     const next = !whiteBg
@@ -164,153 +168,185 @@ export function ThreadPage({ thread, messages, isDraft, folderType }: ThreadPage
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-6">
-      <div className="mx-auto max-w-3xl">
-        <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3">
-          <a href={`/?folder=${encodeURIComponent(thread.folderId)}`}>
-            <ArrowLeft />
-            {t("common.back")}
-          </a>
-        </Button>
-
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold tracking-tight">{thread.subject}</h2>
-            <p className="mt-0.5 text-[13px] text-muted-foreground">
-              {thread.from.name || thread.from.email} · {thread.messageCount}{" "}
-              {thread.messageCount === 1
-                ? t("thread.messageCountOne")
-                : t("thread.messageCountMany", { n: thread.messageCount })}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            {isDraft ? (
-              <Button asChild size="sm">
-                <a href={`/compose?draft=${encodeURIComponent(last?.id ?? "")}`}>
-                  <Pencil data-icon="inline-start" />
-                  {t("thread.editDraft")}
-                </a>
-              </Button>
-            ) : (
-              <Button asChild size="sm">
-                <a href={replyHref(last?.id ?? "")}>
-                  <Reply data-icon="inline-start" />
-                  {t("thread.reply")}
-                </a>
-              </Button>
-            )}
-            {!isDraft && messages.length > 0 && (
-              <SummaryDialog thread={thread} messages={messages} />
-            )}
+    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1 border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
+        {!embedded && (
+          <Button asChild variant="ghost" size="sm" className="-ml-1">
+            <a href={`/?folder=${encodeURIComponent(thread.folderId)}`}>
+              <ArrowLeft />
+              {t("common.back")}
+            </a>
+          </Button>
+        )}
+        <div className={cn("flex flex-wrap items-center gap-0.5", !embedded && "ml-auto")}>
+          {isDraft ? (
+            <Button asChild size="sm">
+              <a href={`/compose?draft=${encodeURIComponent(last?.id ?? "")}`}>
+                <Pencil data-icon="inline-start" />
+                {t("thread.editDraft")}
+              </a>
+            </Button>
+          ) : (
+            <Button asChild size="sm">
+              <a href={replyHref(last?.id ?? "")}>
+                <Reply data-icon="inline-start" />
+                {t("thread.reply")}
+              </a>
+            </Button>
+          )}
+          {!isDraft && messages.length > 0 && <SummaryDialog thread={thread} messages={messages} />}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={archive}
+            disabled={busy}
+            aria-label={t("thread.archive")}
+            title={t("thread.archive")}
+          >
+            <Archive />
+          </Button>
+          {!isDraft && folderType !== "junk" && (
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={archive}
+              onClick={() => void moveToType("junk", t("thread.reportedSpam"))}
               disabled={busy}
-              aria-label={t("thread.archive")}
-              title={t("thread.archive")}
+              aria-label={t("thread.reportSpam")}
+              title={t("thread.reportSpam")}
             >
-              <Archive />
+              <ShieldAlert />
             </Button>
-            {!isDraft && folderType !== "junk" && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => void moveToType("junk", t("thread.reportedSpam"))}
-                disabled={busy}
-                aria-label={t("thread.reportSpam")}
-                title={t("thread.reportSpam")}
-              >
-                <ShieldAlert />
-              </Button>
-            )}
-            {!isDraft && folderType === "junk" && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => void moveToType("inbox", t("thread.notSpamMoved"))}
-                disabled={busy}
-                aria-label={t("thread.notSpam")}
-                title={t("thread.notSpamTitle")}
-              >
-                <ShieldCheck />
-              </Button>
-            )}
-            {!isDraft && folderType === "snoozed" && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={unsnooze}
-                disabled={busy}
-                aria-label={t("thread.restoreNow")}
-                title={t("thread.restoreNow")}
-              >
-                <Undo2 />
-              </Button>
-            )}
-            {!isDraft && folderType !== "snoozed" && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={busy}
-                    aria-label={t("thread.snooze")}
-                    title={t("thread.snooze")}
-                  >
-                    <Clock />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {snoozePresets().map((p) => (
-                    <DropdownMenuItem key={p.label} onClick={() => void snooze(p.until)}>
-                      {p.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {thread.isUnread ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={markRead}
-                aria-label={t("thread.markRead")}
-                title={t("thread.markRead")}
-              >
-                <MailCheck />
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={markUnread}
-                aria-label={t("thread.markUnread")}
-                title={t("thread.markUnread")}
-              >
-                <MailOpen />
-              </Button>
-            )}
+          )}
+          {!isDraft && folderType === "junk" && (
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={toggleWhiteBg}
-              aria-pressed={whiteBg}
-              aria-label={t("thread.whiteBg")}
-              title={whiteBg ? t("thread.whiteBgOff") : t("thread.whiteBgOn")}
+              onClick={() => void moveToType("inbox", t("thread.notSpamMoved"))}
+              disabled={busy}
+              aria-label={t("thread.notSpam")}
+              title={t("thread.notSpamTitle")}
             >
-              {whiteBg ? <MoonStar /> : <SunMedium />}
+              <ShieldCheck />
             </Button>
-          </div>
+          )}
+          {!isDraft && folderType === "snoozed" && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={unsnooze}
+              disabled={busy}
+              aria-label={t("thread.restoreNow")}
+              title={t("thread.restoreNow")}
+            >
+              <Undo2 />
+            </Button>
+          )}
+          {!isDraft && folderType !== "snoozed" && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={busy}
+                  aria-label={t("thread.snooze")}
+                  title={t("thread.snooze")}
+                >
+                  <Clock />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {snoozePresets().map((p) => (
+                  <DropdownMenuItem key={p.label} onClick={() => void snooze(p.until)}>
+                    {p.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {thread.isUnread ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={markRead}
+              aria-label={t("thread.markRead")}
+              title={t("thread.markRead")}
+            >
+              <MailCheck />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={markUnread}
+              aria-label={t("thread.markUnread")}
+              title={t("thread.markUnread")}
+            >
+              <MailOpen />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={toggleWhiteBg}
+            aria-pressed={whiteBg}
+            aria-label={t("thread.whiteBg")}
+            title={whiteBg ? t("thread.whiteBgOff") : t("thread.whiteBgOn")}
+          >
+            {whiteBg ? <MoonStar /> : <SunMedium />}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-3xl px-5 pt-6 pb-10">
+        <div className="mb-5 min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight">{thread.subject}</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            {thread.from.name || thread.from.email} · {thread.messageCount}{" "}
+            {thread.messageCount === 1
+              ? t("thread.messageCountOne")
+              : t("thread.messageCountMany", { n: thread.messageCount })}
+          </p>
         </div>
 
-        <div className="flex flex-col gap-3">
-          {messages.map((m) => (
-            <MessageCard key={m.id} message={m} whiteBg={whiteBg} />
-          ))}
+        <div className="flex flex-col gap-2">
+          {messages.map((m) =>
+            openIds.has(m.id) ? (
+              <MessageCard key={m.id} message={m} whiteBg={whiteBg} />
+            ) : (
+              <button
+                key={m.id}
+                type="button"
+                aria-expanded={false}
+                onClick={() => setOpenIds((prev) => new Set(prev).add(m.id))}
+                className="flex w-full items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <SenderAvatar name={m.from.name || m.from.email} />
+                <span className="w-36 shrink-0 truncate font-medium">
+                  {m.from.name || m.from.email}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                  {m.bodyText.slice(0, 200)}
+                </span>
+                <time className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {formatDate(m.date)}
+                </time>
+              </button>
+            ),
+          )}
         </div>
       </div>
     </div>
+  )
+}
+
+function SenderAvatar({ name }: { name: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+    >
+      {initials(name)}
+    </span>
   )
 }
 
@@ -363,6 +399,7 @@ function MessageCard({ message, whiteBg }: { message: Message; whiteBg: boolean 
     <Card size="sm">
       <CardContent className="flex flex-col gap-2">
         <div className="flex items-center gap-1.5">
+          <SenderAvatar name={message.from.name || message.from.email} />
           <span className="min-w-0 truncate font-medium">{message.from.name}</span>
           <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
             {message.from.email}

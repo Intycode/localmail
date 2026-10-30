@@ -27,15 +27,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -84,11 +75,13 @@ export function AccountsPage({ accounts: staticAccounts }: AccountsPageProps) {
           </EmptyContent>
         </Empty>
       )}
-      <div className="flex flex-col gap-3">
-        {accounts.map((a) => (
-          <AccountCard key={a.id} account={a} />
-        ))}
-      </div>
+      {accounts.length > 0 && (
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          {accounts.map((a) => (
+            <AccountCard key={a.id} account={a} />
+          ))}
+        </ul>
+      )}
       {accounts.length > 0 && <AccountsIo accounts={accounts} />}
     </PageBody>
   )
@@ -134,60 +127,53 @@ function AccountCard({ account }: { account: Account }) {
   }
 
   return (
-    <Card size="sm" className={cn(account.isActive && "ring-primary/40")}>
-      <CardHeader>
-        <div className="flex min-w-0 items-center gap-3">
-          <AvatarDialog
-            accountId={account.id}
-            name={account.name}
-            trigger={
-              <button
-                type="button"
-                aria-label={t("accounts.personalizeAvatar")}
-                title={t("accounts.changeAvatar")}
-                className="group/av relative cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-              >
-                <AccountAvatar accountId={account.id} name={account.name} size="lg" />
-                <span className="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full bg-background ring-1 ring-border transition-colors group-hover/av:bg-muted">
-                  <Pencil className="size-2.5 text-muted-foreground" />
-                </span>
-              </button>
-            }
-          />
-          <div className="grid min-w-0 flex-1">
-            <CardTitle className="truncate">{account.name}</CardTitle>
-            <div className="flex items-center gap-1">
-              <CardDescription className="min-w-0 truncate">{account.email}</CardDescription>
-              <CopyButton value={account.email} label={t("thread.copyEmail")} size="icon-xs" />
-            </div>
-          </div>
-        </div>
-        <CardAction>
-          <Badge variant="secondary" className="h-6 shrink-0 px-2.5 text-sm font-medium">
+    <li
+      className={cn(
+        "flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4",
+        account.isActive && "bg-primary/[0.03]",
+      )}
+    >
+      <AvatarDialog
+        accountId={account.id}
+        name={account.name}
+        trigger={
+          <button
+            type="button"
+            aria-label={t("accounts.personalizeAvatar")}
+            title={t("accounts.changeAvatar")}
+            className="group/av relative cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+          >
+            <AccountAvatar accountId={account.id} name={account.name} size="lg" />
+            <span className="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full bg-background ring-1 ring-border transition-colors group-hover/av:bg-muted">
+              <Pencil className="size-2.5 text-muted-foreground" />
+            </span>
+          </button>
+        }
+      />
+      <div className="flex min-w-0 flex-1 basis-60 flex-col gap-0.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-semibold">{account.name}</span>
+          <Badge variant="secondary" className="font-mono text-[11px] font-normal">
             {formatProvider(account.provider)}
           </Badge>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-muted-foreground">{t("accounts.folders")}</span>
-        {account.folders.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {account.folders.map((f) => (
-              <Badge key={f.id} variant="outline" className="font-normal">
-                {formatFolderName(f.name)}{" "}
-                <span className="tabular-nums text-muted-foreground">{f.total}</span>
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <span className="text-[13px] text-muted-foreground">{t("accounts.noFolders")}</span>
+          {account.isActive && (
+            <Badge className="bg-primary/10 text-primary">{t("nav.activeBadge")}</Badge>
+          )}
+        </div>
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+            {account.email}
+          </span>
+          <CopyButton value={account.email} label={t("thread.copyEmail")} size="icon-xs" />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {!account.isActive && (
+          <Button variant="outline" size="sm" onClick={use}>
+            <UserCheck data-icon="inline-start" />
+            {t("accounts.useThis")}
+          </Button>
         )}
-      </CardContent>
-      <CardFooter className="gap-2">
-        <Button size="sm" onClick={use} disabled={account.isActive}>
-          <UserCheck data-icon="inline-start" />
-          {account.isActive ? t("accounts.active") : t("accounts.useThis")}
-        </Button>
         <Button variant="outline" size="sm" onClick={sync} disabled={syncing}>
           <RefreshCw data-icon="inline-start" className={syncing ? "animate-spin" : undefined} />
           {syncing ? t("accounts.syncing") : t("accounts.sync")}
@@ -195,9 +181,14 @@ function AccountCard({ account }: { account: Account }) {
         {isTauri() && (
           <Dialog>
             <DialogTrigger asChild>
-              <Button variant="destructive" size="sm" className="ml-auto">
-                <Trash2 data-icon="inline-start" />
-                {t("common.remove")}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-destructive hover:text-destructive"
+                aria-label={t("common.remove")}
+                title={t("common.remove")}
+              >
+                <Trash2 />
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -215,8 +206,20 @@ function AccountCard({ account }: { account: Account }) {
             </DialogContent>
           </Dialog>
         )}
-      </CardFooter>
-    </Card>
+      </div>
+      <div className="flex basis-full flex-wrap gap-1.5 sm:pl-[3.25rem]">
+        {account.folders.length > 0 ? (
+          account.folders.map((f) => (
+            <Badge key={f.id} variant="outline" className="font-normal">
+              {formatFolderName(f.name)}{" "}
+              <span className="text-muted-foreground tabular-nums">{f.total}</span>
+            </Badge>
+          ))
+        ) : (
+          <span className="text-[13px] text-muted-foreground">{t("accounts.noFolders")}</span>
+        )}
+      </div>
+    </li>
   )
 }
 

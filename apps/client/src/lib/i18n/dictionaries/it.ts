@@ -70,6 +70,10 @@ export const it: Record<string, string> = {
   "inbox.noSubject": "(senza oggetto)",
   "inbox.archived": "Archiviato",
   "inbox.archiveFailed": "Archiviazione non riuscita",
+  "inbox.unreadCount": "{n} non letti",
+  "inbox.allRead": "Tutto letto",
+  "inbox.selectThread": "Seleziona un messaggio",
+  "inbox.selectThreadDesc": "Si apre qui, senza lasciare la lista.",
 
   // --- thread ---
   "thread.markedRead": "Segnato come letto",
@@ -213,6 +217,7 @@ export const it: Record<string, string> = {
   "search.matchRecipient": "destinatario",
   "search.matchBody": "testo",
   "search.matchSemantic": "simile a",
+  "search.resultCount": "{n} risultati",
 
   // --- account ---
   "accounts.title": "Account",
@@ -368,11 +373,17 @@ export const it: Record<string, string> = {
   "onboarding.doneArchive": "archivia la conversazione",
   "onboarding.doneSettings": "Tema, notifiche e backup si trovano in Impostazioni.",
   "onboarding.openMail": "Apri la posta",
+  "onboarding.steps": "Passaggi",
+  "onboarding.stepWelcome": "Benvenuto",
+  "onboarding.stepAccount": "Account",
+  "onboarding.stepSync": "Sincronizzazione",
+  "onboarding.stepDone": "Pronto",
 
   // --- impostazioni ---
   "settings.title": "Impostazioni",
   "settings.description": "Velocità e privacy prima di tutto. Tutto resta sul tuo dispositivo.",
   "settings.autoSaved": "Le modifiche vengono salvate automaticamente.",
+  "settings.sections": "Sezioni delle impostazioni",
   "settings.general": "Generale",
   "settings.syncOnStart": "Sincronizza all'avvio",
   "settings.syncOnStartDesc": "Sincronizza in background all'avvio, senza bloccare la UI.",

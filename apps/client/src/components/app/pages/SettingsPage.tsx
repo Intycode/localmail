@@ -136,66 +136,105 @@ const themeOptions: {
 ]
 
 /** SettingsPage — persisted toggles + the System/Light/Dark theme picker. */
+/** Section order for the side nav; must match the render order below. */
+const sectionKeys = [
+  ...groups.map((g) => g.titleKey),
+  "settings.send",
+  "settings.appearance",
+  "rules.title",
+  "pgp.title",
+  "ai.title",
+  "backup.title",
+  "security.title",
+]
+
+function sectionId(titleKey: string): string {
+  return `s-${titleKey.replace(".", "-")}`
+}
+
 export function SettingsPage() {
   const t = useT()
   return (
     <PageBody>
       <PageHeader title={t("settings.title")} description={t("settings.description")} />
-      <div className="flex flex-col gap-6">
-        {groups.map((g) => (
-          <Section key={g.titleKey} titleKey={g.titleKey} icon={g.icon}>
-            {g.toggles.map((tg) => (
-              <ToggleRow key={tg.key} def={tg} />
+      <div className="md:grid md:grid-cols-[10.5rem_minmax(0,1fr)] md:gap-10">
+        <nav aria-label={t("settings.sections")} className="hidden md:block">
+          <ul className="sticky top-6 flex flex-col gap-0.5">
+            {sectionKeys.map((k) => (
+              <li key={k}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    document
+                      .getElementById(sectionId(k))
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                  className="flex h-8 w-full items-center rounded-md px-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {t(k)}
+                </button>
+              </li>
             ))}
+          </ul>
+        </nav>
+        <div className="flex min-w-0 flex-col gap-8">
+          {groups.map((g) => (
+            <Section key={g.titleKey} titleKey={g.titleKey} icon={g.icon}>
+              {g.toggles.map((tg) => (
+                <ToggleRow key={tg.key} def={tg} />
+              ))}
+            </Section>
+          ))}
+
+          <Section titleKey="settings.send" icon={Clock}>
+            <SendUndoRow />
           </Section>
-        ))}
 
-        <Section titleKey="settings.send" icon={Clock}>
-          <SendUndoRow />
-        </Section>
+          <Section titleKey="settings.appearance" icon={Palette}>
+            <ThemeRow />
+            <LanguageRow />
+          </Section>
 
-        <Section titleKey="settings.appearance" icon={Palette}>
-          <ThemeRow />
-          <LanguageRow />
-        </Section>
+          <Section titleKey="rules.title" icon={Filter}>
+            <RulesSection />
+          </Section>
 
-        <Section titleKey="rules.title" icon={Filter}>
-          <RulesSection />
-        </Section>
+          <Section titleKey="pgp.title" icon={KeyRound}>
+            <PgpSection />
+          </Section>
 
-        <Section titleKey="pgp.title" icon={KeyRound}>
-          <PgpSection />
-        </Section>
+          <Section titleKey="ai.title" icon={Sparkles}>
+            <AISection />
+          </Section>
 
-        <Section titleKey="ai.title" icon={Sparkles}>
-          <AISection />
-        </Section>
+          <Section titleKey="backup.title" icon={DatabaseBackup}>
+            <ToggleRow
+              def={{
+                key: AUTOBACKUP_KEY,
+                labelKey: "backup.daily",
+                descKey: "backup.dailyDesc",
+                defaultValue: false,
+              }}
+            />
+            <AutoBackupDirRow />
+          </Section>
 
-        <Section titleKey="backup.title" icon={DatabaseBackup}>
-          <ToggleRow
-            def={{
-              key: AUTOBACKUP_KEY,
-              labelKey: "backup.daily",
-              descKey: "backup.dailyDesc",
-              defaultValue: false,
-            }}
-          />
-          <AutoBackupDirRow />
-        </Section>
-
-        <Section titleKey="security.title" icon={ShieldCheck}>
-          <div className="flex items-start gap-4 px-4 py-3.5">
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="flex items-center gap-2 font-semibold">
-                {t("security.secureStorage")}{" "}
-                <Badge variant="secondary">{t("security.keyringBadge")}</Badge>
-              </span>
-              <span className="text-[13px] text-muted-foreground">{t("security.keyringDesc")}</span>
+          <Section titleKey="security.title" icon={ShieldCheck}>
+            <div className="flex items-start gap-4 px-4 py-3.5">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex items-center gap-2 font-semibold">
+                  {t("security.secureStorage")}{" "}
+                  <Badge variant="secondary">{t("security.keyringBadge")}</Badge>
+                </span>
+                <span className="text-[13px] text-muted-foreground">
+                  {t("security.keyringDesc")}
+                </span>
+              </div>
             </div>
-          </div>
-        </Section>
+          </Section>
 
-        <p className="pt-1 text-center text-xs text-muted-foreground">{t("settings.autoSaved")}</p>
+          <p className="text-xs text-muted-foreground">{t("settings.autoSaved")}</p>
+        </div>
       </div>
     </PageBody>
   )
@@ -212,15 +251,15 @@ function Section({
 }) {
   const t = useT()
   return (
-    <div>
-      <h4 className="mb-2 ml-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-        <Icon className="size-3.5" />
+    <section id={sectionId(titleKey)} className="scroll-mt-6">
+      <h2 className="mb-2.5 flex items-center gap-2 text-[15px] font-semibold">
+        <Icon className="size-4 text-muted-foreground" />
         {t(titleKey)}
-      </h4>
+      </h2>
       <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {children}
       </div>
-    </div>
+    </section>
   )
 }
 

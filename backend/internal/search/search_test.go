@@ -267,17 +267,21 @@ func TestFtsPrefixAndPhrase(t *testing.T) {
 }
 
 func TestFtsTermBuilding(t *testing.T) {
-	if got := ftsTerm("rinnovo contratto"); got != `rinnovo* contratto*` {
+	if got := ftsTerm("rinnovo contratto"); got != `"rinnovo"* "contratto"*` {
 		t.Fatalf("ftsTerm multi = %q", got)
 	}
 	if got := ftsTerm(`"ferie agosto"`); got != `"ferie agosto"` {
 		t.Fatalf("ftsTerm phrase = %q", got)
 	}
-	if got := ftsTerm("anna@acme.dev"); got != `anna* acme* dev*` {
+	if got := ftsTerm("anna@acme.dev"); got != `"anna"* "acme"* "dev"*` {
 		t.Fatalf("ftsTerm email = %q", got)
 	}
 	if got := ftsTerm("!!!"); got != `"!!!"` {
 		t.Fatalf("ftsTerm punctuation fallback = %q", got)
+	}
+	// FTS5 operators typed by the user are plain words, not syntax errors
+	if got := ftsTerm("Tom AND Jerry"); got != `"Tom"* "AND"* "Jerry"*` {
+		t.Fatalf("ftsTerm operator = %q", got)
 	}
 	if got := ftsTerm("  "); got != "" {
 		t.Fatalf("ftsTerm empty = %q", got)

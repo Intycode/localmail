@@ -75,7 +75,9 @@ export function AppShell({
               unifiedActive={unifiedActive}
             />
             <SidebarInset className="flex min-h-0 min-w-0 flex-col">
-              <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+              {/* Mobile only: on desktop compose/search live in the sidebar and
+                  each page owns its toolbar (more vertical room for mail). */}
+              <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3 md:hidden">
                 <SidebarTrigger className="-ml-1" />
                 <div className="ml-auto flex items-center gap-1">
                   <Button

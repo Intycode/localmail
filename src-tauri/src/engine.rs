@@ -229,27 +229,40 @@ impl Engine {
     /// credentials from the OS keychain and re-delivers them via the
     /// engine-internal "secrets.restore" op. Only this Rust path may call
     /// that op (engine_invoke rejects it).
-    fn restore_secrets(&self) -> Result<(), String> {
+    fn restore_secrets(&self) -> Result<usize, String> {
         let accounts = self.invoke("accounts.list", json!({}), DEFAULT_TIMEOUT)?;
         let mut secrets: Vec<Value> = Vec::new();
         if let Some(list) = accounts.as_array() {
             for acc in list {
                 if let Some(id) = acc.get("id").and_then(|v| v.as_str()) {
-                    if let Ok(secret) = crate::secrets::get_secret(id) {
+                    if let Ok(secret) = self.account_secret(id) {
                         secrets.push(json!({"accountId": id, "secret": secret}));
+                    }
+                    // PGP private keyrings (M9) travel the same channel
+                    if let Ok(key) = crate::secrets::pgp_get(id) {
+                        secrets.push(json!({"accountId": format!("pgp/{}", id), "secret": key}));
                     }
                 }
             }
         }
         if secrets.is_empty() {
-            return Ok(());
+            return Ok(0);
         }
+        let restored = secrets.len();
         self.invoke(
             "secrets.restore",
             json!({ "secrets": secrets }),
             DEFAULT_TIMEOUT,
         )
-        .map(|_| ())
+        .map(|_| restored)
+    }
+
+    /// account_secret is the credential the engine needs right now: the
+    /// keychain password, or a fresh access token for OAuth accounts (the
+    /// keychain holds their refresh token, which IMAP/Graph reject).
+    fn account_secret(&self, account_id: &str) -> Result<String, String> {
+        let stored = crate::secrets::get_secret(account_id)?;
+        crate::oauth::effective_secret(&self.app, account_id, &stored)
     }
 
     /// invoke sends one op and waits for the matching response. Locks are
@@ -426,19 +439,16 @@ pub async fn account_add(
 #[tauri::command]
 pub async fn account_sync(
     state: tauri::State<'_, Arc<Engine>>,
-    app: tauri::AppHandle,
     account_id: String,
 ) -> Result<Value, ()> {
     Ok(run_engine(state, move |engine| {
-        crate::secrets::get_secret(&account_id)
-            .and_then(|secret| crate::oauth::effective_secret(&app, &account_id, &secret))
-            .and_then(|secret| {
-                engine.invoke(
-                    "sync.start",
-                    json!({"accountId": account_id, "secret": secret}),
-                    Engine::timeout_for("sync.start"),
-                )
-            })
+        engine.account_secret(&account_id).and_then(|secret| {
+            engine.invoke(
+                "sync.start",
+                json!({"accountId": account_id, "secret": secret}),
+                Engine::timeout_for("sync.start"),
+            )
+        })
     })
     .await)
 }
@@ -446,20 +456,17 @@ pub async fn account_sync(
 #[tauri::command]
 pub async fn account_send(
     state: tauri::State<'_, Arc<Engine>>,
-    app: tauri::AppHandle,
     account_id: String,
     message: Value,
 ) -> Result<Value, ()> {
     Ok(run_engine(state, move |engine| {
-        crate::secrets::get_secret(&account_id)
-            .and_then(|secret| crate::oauth::effective_secret(&app, &account_id, &secret))
-            .and_then(|secret| {
-                engine.invoke(
-                    "send",
-                    json!({"accountId": account_id, "secret": secret, "message": message}),
-                    Engine::timeout_for("send"),
-                )
-            })
+        engine.account_secret(&account_id).and_then(|secret| {
+            engine.invoke(
+                "send",
+                json!({"accountId": account_id, "secret": secret, "message": message}),
+                Engine::timeout_for("send"),
+            )
+        })
     })
     .await)
 }
@@ -473,7 +480,7 @@ pub async fn attachment_export(
     dest: String,
 ) -> Result<Value, ()> {
     Ok(run_engine(state, move |engine| {
-        crate::secrets::get_secret(&account_id).and_then(|secret| {
+        engine.account_secret(&account_id).and_then(|secret| {
             engine.invoke(
                 "attachment.save",
                 json!({"messageId": message_id, "name": name, "dest": dest, "secret": secret}),
@@ -496,7 +503,7 @@ pub async fn attachment_text(
     name: String,
 ) -> Result<Value, ()> {
     Ok(run_engine(state, move |engine| {
-        crate::secrets::get_secret(&account_id).and_then(|secret| {
+        engine.account_secret(&account_id).and_then(|secret| {
             engine.invoke(
                 "attachment.text",
                 json!({"messageId": message_id, "name": name, "secret": secret}),
@@ -517,7 +524,7 @@ pub async fn attachment_preview(
     name: String,
 ) -> Result<Value, ()> {
     Ok(run_engine(state, move |engine| {
-        crate::secrets::get_secret(&account_id).and_then(|secret| {
+        engine.account_secret(&account_id).and_then(|secret| {
             engine.invoke(
                 "attachment.preview",
                 json!({"messageId": message_id, "name": name, "secret": secret}),
@@ -540,7 +547,7 @@ pub async fn attachment_images(
     name: String,
 ) -> Result<Value, ()> {
     Ok(run_engine(state, move |engine| {
-        crate::secrets::get_secret(&account_id).and_then(|secret| {
+        engine.account_secret(&account_id).and_then(|secret| {
             engine.invoke(
                 "attachment.images",
                 json!({"messageId": message_id, "name": name, "secret": secret}),
@@ -587,7 +594,7 @@ fn open_attachment(
         .join(sanitize_component(message_id));
     std::fs::create_dir_all(&dir).map_err(|e| format!("creazione cache allegati: {}", e))?;
     let dest = dir.join(sanitize_component(name));
-    let secret = crate::secrets::get_secret(account_id)?;
+    let secret = engine.account_secret(account_id)?;
     engine.invoke(
         "attachment.save",
         json!({
@@ -694,7 +701,7 @@ fn download_attachment(
         .map_err(|e| format!("cartella Scaricati non disponibile: {}", e))?;
     std::fs::create_dir_all(&downloads).map_err(|e| format!("creazione Scaricati: {}", e))?;
     let dest = unique_path(&downloads.join(sanitize_component(name)))?;
-    let secret = crate::secrets::get_secret(account_id)?;
+    let secret = engine.account_secret(account_id)?;
     engine.invoke(
         "attachment.save",
         json!({
@@ -760,29 +767,9 @@ pub async fn account_remove(state: tauri::State<'_, Arc<Engine>>, account_id: St
 #[tauri::command]
 pub async fn secrets_restore(state: tauri::State<'_, Arc<Engine>>) -> Result<Value, ()> {
     Ok(run_engine(state, move |engine| {
-        let accounts = engine.invoke("accounts.list", json!({}), DEFAULT_TIMEOUT)?;
-        let mut secrets: Vec<Value> = Vec::new();
-        if let Some(list) = accounts.as_array() {
-            for acc in list {
-                if let Some(id) = acc.get("id").and_then(|v| v.as_str()) {
-                    if let Ok(secret) = crate::secrets::get_secret(id) {
-                        secrets.push(json!({"accountId": id, "secret": secret}));
-                    }
-                    // PGP private keyrings (M9) travel the same channel
-                    if let Ok(key) = crate::secrets::pgp_get(id) {
-                        secrets.push(json!({"accountId": format!("pgp/{}", id), "secret": key}));
-                    }
-                }
-            }
-        }
-        let restored = secrets.len();
         engine
-            .invoke(
-                "secrets.restore",
-                json!({ "secrets": secrets }),
-                DEFAULT_TIMEOUT,
-            )
-            .map(|_| json!({ "restored": restored }))
+            .restore_secrets()
+            .map(|restored| json!({ "restored": restored }))
     })
     .await)
 }

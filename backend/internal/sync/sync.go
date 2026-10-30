@@ -235,17 +235,22 @@ func (e *Engine) syncFolder(accountID string, ref account.SyncRef, p provider.Ma
 	}
 
 	// Reconcile server-side deletions: local UIDs missing from the server.
-	local, err := e.messages.LocalUIDs(ref.FolderID)
-	if err != nil {
-		return err
-	}
-	if missing := difference(local, fs.AllUIDs); len(missing) > 0 {
-		if err := e.messages.DeleteUIDs(ref.FolderID, missing); err != nil {
+	if !fs.Partial {
+		local, err := e.messages.LocalUIDs(ref.FolderID)
+		if err != nil {
 			return err
+		}
+		if missing := difference(local, fs.AllUIDs); len(missing) > 0 {
+			if err := e.messages.DeleteUIDs(ref.FolderID, missing); err != nil {
+				return err
+			}
 		}
 	}
 
 	highest := ref.LastUID
+	if ref.UIDValidity != 0 && fs.UIDValidity != ref.UIDValidity {
+		highest = 0 // folder was wiped above: the old high-water mark is meaningless
+	}
 	if n := len(fs.AllUIDs); n > 0 && fs.AllUIDs[n-1] > highest {
 		highest = fs.AllUIDs[n-1]
 	}

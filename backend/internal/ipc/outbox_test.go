@@ -6,8 +6,10 @@ package ipc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,5 +140,15 @@ func TestIsNetworkError(t *testing.T) {
 		if got := isNetworkError(tc.err); got != tc.want {
 			t.Errorf("isNetworkError(%v) = %v, want %v", tc.err, got, tc.want)
 		}
+	}
+}
+
+func TestStripSecretNeverPersistsCredentials(t *testing.T) {
+	out := stripSecret(json.RawMessage(`{"accountId":"a1","secret":"hunter2","message":{"to":["x@y"]}}`))
+	if strings.Contains(string(out), "hunter2") || !strings.Contains(string(out), `"accountId":"a1"`) {
+		t.Fatalf("stripSecret = %s", out)
+	}
+	if got := string(stripSecret(nil)); got != "{}" {
+		t.Fatalf("empty params = %s", got)
 	}
 }
