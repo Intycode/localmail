@@ -113,103 +113,103 @@ impl Engine {
             }
             *self.stdin.lock().unwrap() = None;
 
-        let bin = Self::resolve_binary()?;
-        if let Some(parent) = self.db_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        // Database encryption key (M3): generated on first run, kept in the
-        // OS keychain, passed via env — never written next to the database.
-        // Fail-hard: an encrypted database cannot open without its key.
-        let db_key = crate::secrets::db_key()?;
-        let mut command = Command::new(&bin);
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            // CREATE_NO_WINDOW: il motore è un binario console-subsystem; senza
-            // questo flag Windows apre una console vuota visibile accanto all'app.
-            command.creation_flags(0x0800_0000);
-        }
-        let mut spawned = command
-            .arg("--serve")
-            .arg("--db")
-            .arg(&self.db_path)
-            .env("MAIL_DB_KEY", &db_key)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("avvio motore ({}): {}", bin.display(), e))?;
+            let bin = Self::resolve_binary()?;
+            if let Some(parent) = self.db_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            // Database encryption key (M3): generated on first run, kept in the
+            // OS keychain, passed via env — never written next to the database.
+            // Fail-hard: an encrypted database cannot open without its key.
+            let db_key = crate::secrets::db_key()?;
+            let mut command = Command::new(&bin);
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                // CREATE_NO_WINDOW: il motore è un binario console-subsystem; senza
+                // questo flag Windows apre una console vuota visibile accanto all'app.
+                command.creation_flags(0x0800_0000);
+            }
+            let mut spawned = command
+                .arg("--serve")
+                .arg("--db")
+                .arg(&self.db_path)
+                .env("MAIL_DB_KEY", &db_key)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("avvio motore ({}): {}", bin.display(), e))?;
 
-        // engine stderr (panics, sync/SMTP errors) goes to a rotating log
-        // file instead of /dev/null: app_data_dir/logs/engine.log[.old]
-        if let Some(stderr) = spawned.stderr.take() {
-            let logs_dir = self
-                .db_path
-                .parent()
-                .unwrap_or(&PathBuf::from("."))
-                .join("logs");
-            std::thread::spawn(move || {
-                let _ = std::fs::create_dir_all(&logs_dir);
-                let log_path = logs_dir.join("engine.log");
-                rotate_if_big(&log_path, 1_048_576);
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    use std::io::{BufRead, Write as _};
-                    let _ = writeln!(f, "=== engine start {} ===", chrono_now());
-                    let mut reader = BufReader::new(stderr);
-                    loop {
-                        let mut line = String::new();
-                        match reader.read_line(&mut line) {
-                            Ok(0) | Err(_) => break,
-                            Ok(_) => {
-                                let _ = writeln!(f, "{}", line.trim_end_matches(['\n', '\r']));
+            // engine stderr (panics, sync/SMTP errors) goes to a rotating log
+            // file instead of /dev/null: app_data_dir/logs/engine.log[.old]
+            if let Some(stderr) = spawned.stderr.take() {
+                let logs_dir = self
+                    .db_path
+                    .parent()
+                    .unwrap_or(&PathBuf::from("."))
+                    .join("logs");
+                std::thread::spawn(move || {
+                    let _ = std::fs::create_dir_all(&logs_dir);
+                    let log_path = logs_dir.join("engine.log");
+                    rotate_if_big(&log_path, 1_048_576);
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&log_path)
+                    {
+                        use std::io::{BufRead, Write as _};
+                        let _ = writeln!(f, "=== engine start {} ===", chrono_now());
+                        let mut reader = BufReader::new(stderr);
+                        loop {
+                            let mut line = String::new();
+                            match reader.read_line(&mut line) {
+                                Ok(0) | Err(_) => break,
+                                Ok(_) => {
+                                    let _ = writeln!(f, "{}", line.trim_end_matches(['\n', '\r']));
+                                }
                             }
                         }
+                        let _ = writeln!(f, "=== engine exit {} ===", chrono_now());
                     }
-                    let _ = writeln!(f, "=== engine exit {} ===", chrono_now());
+                });
+            }
+
+            let stdout = spawned
+                .stdout
+                .take()
+                .ok_or("stdout del motore non disponibile")?;
+            *self.stdin.lock().unwrap() = spawned.stdin.take();
+            *child = Some(spawned);
+
+            let pending = Arc::clone(&self.pending);
+            let app = self.app.clone();
+            let dead = Arc::clone(&self.dead);
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines() {
+                    let line = match line {
+                        Ok(l) => l,
+                        Err(_) => break,
+                    };
+                    let value: Value = match serde_json::from_str(&line) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                    if let Some(id) = value.get("id").and_then(|v| v.as_str()) {
+                        if let Some(tx) = pending.lock().unwrap().remove(id) {
+                            let _ = tx.send(value);
+                        }
+                    } else if value.get("kind").is_some() {
+                        let _ = app.emit("mail://event", value);
+                    }
+                }
+                // engine died: fail every pending request
+                dead.store(true, std::sync::atomic::Ordering::SeqCst);
+                let mut map = pending.lock().unwrap();
+                for (_, tx) in map.drain() {
+                    let _ = tx.send(json!({"ok": false, "error": "il motore non risponde: è stato riavviato, riprova"}));
                 }
             });
-        }
-
-        let stdout = spawned
-            .stdout
-            .take()
-            .ok_or("stdout del motore non disponibile")?;
-        *self.stdin.lock().unwrap() = spawned.stdin.take();
-        *child = Some(spawned);
-
-        let pending = Arc::clone(&self.pending);
-        let app = self.app.clone();
-        let dead = Arc::clone(&self.dead);
-        std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(_) => break,
-                };
-                let value: Value = match serde_json::from_str(&line) {
-                    Ok(v) => v,
-                    Err(_) => continue,
-                };
-                if let Some(id) = value.get("id").and_then(|v| v.as_str()) {
-                    if let Some(tx) = pending.lock().unwrap().remove(id) {
-                        let _ = tx.send(value);
-                    }
-                } else if value.get("kind").is_some() {
-                    let _ = app.emit("mail://event", value);
-                }
-            }
-            // engine died: fail every pending request
-            dead.store(true, std::sync::atomic::Ordering::SeqCst);
-            let mut map = pending.lock().unwrap();
-            for (_, tx) in map.drain() {
-                let _ = tx.send(json!({"ok": false, "error": "il motore non risponde: è stato riavviato, riprova"}));
-            }
-        });
         } // child lock guard drops here
 
         // The engine's runtime vault starts empty after a (re)spawn: re-deliver
@@ -272,7 +272,9 @@ impl Engine {
         self.ensure_spawned()?;
         let id = format!(
             "req-{}",
-            self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+            self.counter
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                + 1
         );
         let (tx, rx) = channel();
         self.pending.lock().unwrap().insert(id.clone(), tx);
@@ -391,25 +393,40 @@ pub async fn engine_invoke(
 #[tauri::command]
 pub async fn account_add(
     state: tauri::State<'_, Arc<Engine>>,
+    app: AppHandle,
     name: String,
     email: String,
     imap: Value,
+    smtp: Option<Value>,
     secret: String,
     provider: Option<String>,
     allow_insecure: Option<bool>,
 ) -> Result<Value, ()> {
-    let params = json!({
-        "name": name,
-        "email": email,
-        "imap": imap,
-        "secret": secret,
-        "allowInsecure": allow_insecure.unwrap_or(false),
-    });
+    let is_oauth = matches!(
+        provider.as_deref(),
+        Some("gmail-oauth") | Some("microsoft-oauth") | Some("microsoft")
+    );
     Ok(run_engine(state, move |engine| {
-        let is_oauth = matches!(
-            provider.as_deref(),
-            Some("gmail-oauth") | Some("microsoft-oauth") | Some("microsoft")
-        );
+        // the engine validates the account by logging in: OAuth accounts need a
+        // fresh access token there, not the refresh token kept in the keychain
+        let engine_secret = if provider.as_deref() == Some("gmail-oauth") {
+            crate::oauth::google_refresh(&app, &secret)?.0
+        } else {
+            secret.clone()
+        };
+        let params = json!({
+            "name": name,
+            "email": email,
+            "imap": imap,
+            "smtp": smtp,
+            "secret": engine_secret,
+            "allowInsecure": allow_insecure.unwrap_or(false),
+            // "microsoft-oauth" is the marker's name; the engine knows "microsoft"
+            "provider": match provider.as_deref() {
+                Some("microsoft-oauth") => Some("microsoft"),
+                other => other,
+            },
+        });
         engine
             .invoke("accounts.add", params, Engine::timeout_for("accounts.add"))
             .and_then(|account| {
@@ -438,8 +455,11 @@ pub async fn account_add(
                 }) {
                     Ok(()) => Ok(account),
                     Err(e) => {
-                        let _ = engine
-                            .invoke("accounts.remove", json!({"accountId": id}), DEFAULT_TIMEOUT);
+                        let _ = engine.invoke(
+                            "accounts.remove",
+                            json!({"accountId": id}),
+                            DEFAULT_TIMEOUT,
+                        );
                         Err(format!("{} (account rimosso: riprova)", e))
                     }
                 }
@@ -741,7 +761,10 @@ fn unique_path(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub async fn account_remove(state: tauri::State<'_, Arc<Engine>>, account_id: String) -> Result<Value, ()> {
+pub async fn account_remove(
+    state: tauri::State<'_, Arc<Engine>>,
+    account_id: String,
+) -> Result<Value, ()> {
     Ok(run_engine(state, move |engine| {
         let result = engine.invoke(
             "accounts.remove",

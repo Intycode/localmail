@@ -397,6 +397,7 @@ export class TauriMailService implements MailService, AccountAdminService {
       name: draft.name,
       email: draft.email,
       imap: draft.imap,
+      smtp: draft.smtp,
       secret: draft.secret,
       provider: draft.provider,
       allowInsecure: draft.allowInsecure ?? false,

@@ -256,11 +256,16 @@ function AddAccountDialog({ trigger }: { trigger?: React.ReactNode }) {
         </DialogHeader>
         <AccountConnectForm
           formId="add-account-form"
-          onConnected={() => {
+          onConnected={(added) => {
             setOpen(false)
-            // the engine event stream would refresh the stores anyway, but a
-            // reload also re-runs the first sync immediately
-            window.location.reload()
+            void (async () => {
+              try {
+                setStoreAccounts(await (await getMailService()).getAccounts())
+              } catch {
+                // the engine event stream still refreshes the stores
+              }
+              syncAccount(added.id)
+            })()
           }}
           footer={(submitting) => (
             <DialogFooter className="shrink-0 border-t border-border px-6 py-3.5">

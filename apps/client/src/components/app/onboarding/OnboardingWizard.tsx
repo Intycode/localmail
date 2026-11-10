@@ -69,16 +69,12 @@ export function OnboardingWizard({ onClose }: OnboardingWizardProps) {
   /** Account connected: refresh the stores, pick the new account and jump
    *  to the sync step (an explicit sync makes the progress visible even if
    *  the engine's automatic first sync is still starting). */
-  async function connected(): Promise<void> {
+  async function connected(added: Account): Promise<void> {
+    setAccountId(added.id)
     try {
       const svc = await getMailService()
-      const accounts: Account[] = await svc.getAccounts()
-      setStoreAccounts(accounts)
-      const last = accounts[accounts.length - 1]
-      if (last) {
-        setAccountId(last.id)
-        syncAccount(last.id)
-      }
+      setStoreAccounts(await svc.getAccounts())
+      syncAccount(added.id)
     } catch {
       // engine hiccup: the event stream still drives the sync step
     }
@@ -103,7 +99,7 @@ export function OnboardingWizard({ onClose }: OnboardingWizardProps) {
         {step === "welcome" && <WelcomeStep onStart={() => setStep("connect")} onSkip={dismiss} />}
         {step === "connect" && (
           <ConnectStep
-            onConnected={() => void connected()}
+            onConnected={(a) => void connected(a)}
             onBack={dismiss}
             formId="onboarding-account-form"
           />
@@ -214,7 +210,7 @@ function ConnectStep({
   onBack,
   formId,
 }: {
-  onConnected: () => void
+  onConnected: (account: Account) => void
   onBack: () => void
   formId: string
 }) {

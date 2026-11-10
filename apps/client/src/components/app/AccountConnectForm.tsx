@@ -30,7 +30,7 @@ interface AccountConnectFormProps {
    * The caller decides what happens next: close the dialog, advance the
    * onboarding wizard, refresh stores… The form never navigates.
    */
-  onConnected: () => void
+  onConnected: (account: Account) => void
   /**
    * Pinned footer, rendered after the scrollable body. Receives the
    * submitting flag; the standard submit button is
@@ -81,15 +81,13 @@ export function AccountConnectForm({
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((f) => {
       const next = { ...f, [key]: value }
-      // Smart prefill: from the email derive username and IMAP host (only in
-      // still-empty fields, so manual edits are never stomped).
+      // Prefill only the username from the email (never server hosts: guessed
+      // hosts are often wrong — providers have explicit presets instead).
       if (key === "email") {
         const email = String(value).trim()
         const at = email.indexOf("@")
         if (at > 0 && email.indexOf(".", at) > at + 1) {
-          const domain = email.slice(at + 1)
           if (!f.username.trim()) next.username = email
-          if (next.kind === "imap" && !f.host.trim()) next.host = `imap.${domain}`
         }
       }
       if (key === "kind") {
@@ -103,6 +101,25 @@ export function AccountConnectForm({
       }
       return next
     })
+  }
+
+  function applyPreset(key: string): void {
+    const p = PRESETS.find((x) => x.key === key)
+    setForm((f) =>
+      p
+        ? {
+            ...f,
+            preset: key,
+            host: p.imap.host,
+            port: String(p.imap.port),
+            security: p.imap.security,
+            smtpAdvanced: true,
+            smtpHost: p.smtp.host,
+            smtpPort: String(p.smtp.port),
+            smtpSecurity: p.smtp.security,
+          }
+        : { ...f, preset: "" },
+    )
   }
 
   async function submit(e: SubmitEvent<HTMLFormElement>): Promise<void> {
@@ -120,10 +137,11 @@ export function AccountConnectForm({
       const svc = await getMailService()
       const admin = svc as AccountAdmin
       if (!admin.addAccount) throw new Error(t("common.engineOnly"))
+      let added: Account
       if (form.kind === "jmap") {
         // JMAP: Imap.Host carries the session URL; sending goes through
         // EmailSubmission, so no SMTP config is sent
-        await admin.addAccount({
+        added = await admin.addAccount({
           name: form.name.trim(),
           email: form.email.trim(),
           imap: {
@@ -136,7 +154,7 @@ export function AccountConnectForm({
           provider: "jmap",
         })
       } else {
-        await admin.addAccount({
+        added = await admin.addAccount({
           name: form.name.trim(),
           email: form.email.trim(),
           imap: {
@@ -151,7 +169,7 @@ export function AccountConnectForm({
                   host: form.smtpHost.trim(),
                   port: Number(form.smtpPort) || 465,
                   security: form.smtpSecurity,
-                  username: form.smtpUsername.trim(),
+                  username: form.smtpUsername.trim() || form.username.trim(),
                 },
               }
             : {}),
@@ -163,7 +181,7 @@ export function AccountConnectForm({
       // clear the password field immediately: the secret lives in the keychain
       setForm(emptyForm)
       setErrors({})
-      onConnected()
+      onConnected(added)
     } catch (err) {
       fail(err instanceof Error && err.message.trim() ? err.message : t("connect.addFailed"))
     } finally {
@@ -181,12 +199,13 @@ export function AccountConnectForm({
     }
     setMicrosoftStarting(true)
     setSubmitError("")
+    let deviceToast: string | number | undefined
     try {
       const svc = await getMailService()
       if (!svc.oauthMicrosoftBegin) throw new Error(t("common.engineOnly"))
       const begin = await svc.oauthMicrosoftBegin()
       if (!svc.oauthMicrosoftWait) throw new Error(t("common.engineOnly"))
-      toast.info(t("connect.deviceCode", { code: begin.userCode }), {
+      deviceToast = toast.info(t("connect.deviceCode", { code: begin.userCode }), {
         description: t("connect.deviceCodeDesc", { uri: begin.verificationUri }),
         duration: 600_000,
       })
@@ -209,12 +228,14 @@ export function AccountConnectForm({
         secret: refreshToken,
         provider: "microsoft",
       }
-      await admin.addAccount(draft)
+      const added = await admin.addAccount(draft)
       toast.success(t("connect.microsoftConnected"))
-      onConnected()
+      onConnected(added)
     } catch (err: unknown) {
       fail(err instanceof Error && err.message.trim() ? err.message : t("connect.microsoftFailed"))
     } finally {
+      // the 10-minute code toast must not outlive the flow
+      toast.dismiss(deviceToast)
       setMicrosoftStarting(false)
     }
   }
@@ -254,9 +275,9 @@ export function AccountConnectForm({
         secret: refreshToken,
         provider: "gmail-oauth",
       }
-      await admin.addAccount(draft)
+      const added = await admin.addAccount(draft)
       toast.success(t("connect.googleConnected"))
-      onConnected()
+      onConnected(added)
     } catch (err: unknown) {
       fail(err instanceof Error && err.message.trim() ? err.message : t("connect.googleFailed"))
     } finally {
@@ -309,8 +330,8 @@ export function AccountConnectForm({
               {microsoftStarting ? t("connect.microsoftWait") : t("connect.microsoftCta")}
             </Button>
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">{t("connect.orManual")}</p>
+          <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-4">
+            <p className="text-xs font-medium text-muted-foreground">{t("connect.orManual")}</p>
             <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
               <Button
                 type="button"
@@ -366,6 +387,29 @@ export function AccountConnectForm({
             </p>
           )}
 
+          {form.kind === "imap" && (
+            <Field>
+              <FieldLabel htmlFor={id("preset")}>{t("connect.preset")}</FieldLabel>
+              <Select
+                value={form.preset || CUSTOM}
+                onValueChange={(v) => applyPreset(v === CUSTOM ? "" : v)}
+              >
+                <SelectTrigger id={id("preset")} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={CUSTOM}>{t("connect.presetCustom")}</SelectItem>
+                  {PRESETS.map((p) => (
+                    <SelectItem key={p.key} value={p.key}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>{t("connect.presetHint")}</FieldDescription>
+            </Field>
+          )}
+
           <div className="grid grid-cols-3 gap-3">
             <Field
               className={form.kind === "jmap" ? "col-span-3" : "col-span-2"}
@@ -377,7 +421,7 @@ export function AccountConnectForm({
               <Input
                 id={id("host")}
                 value={form.host}
-                onChange={(e) => set("host", e.target.value)}
+                onChange={(e) => setForm((f) => ({ ...f, host: e.target.value, preset: "" }))}
                 placeholder={
                   form.kind === "jmap" ? "https://api.fastmail.com/jmap/session" : "imap.esempio.it"
                 }
@@ -580,6 +624,8 @@ type AccountAdmin = {
 interface FormState {
   /** Server type: classic IMAP or JMAP (Fastmail/Stalwart). */
   kind: "imap" | "jmap"
+  /** key of the chosen PRESETS entry, "" = manual */
+  preset: string
   name: string
   email: string
   host: string
@@ -597,6 +643,7 @@ interface FormState {
 
 const emptyForm: FormState = {
   kind: "imap",
+  preset: "",
   name: "",
   email: "",
   host: "",
@@ -610,6 +657,80 @@ const emptyForm: FormState = {
   smtpSecurity: "tls",
   smtpUsername: "",
 }
+
+const CUSTOM = "__custom"
+
+type Sec = ImapConfig["security"]
+
+/** Well-known providers: IMAP + SMTP are always explicit, because the engine's
+ *  smtp.<domain> derivation is wrong for several of them (e.g. Infomaniak). */
+const PRESETS: {
+  key: string
+  label: string
+  imap: { host: string; port: number; security: Sec }
+  smtp: { host: string; port: number; security: SmtpConfig["security"] }
+}[] = [
+  {
+    key: "hostinger",
+    label: "Hostinger",
+    imap: { host: "imap.hostinger.com", port: 993, security: "tls" },
+    smtp: { host: "smtp.hostinger.com", port: 465, security: "tls" },
+  },
+  {
+    key: "infomaniak",
+    label: "Infomaniak",
+    imap: { host: "mail.infomaniak.com", port: 993, security: "tls" },
+    smtp: { host: "mail.infomaniak.com", port: 465, security: "tls" },
+  },
+  {
+    key: "aruba",
+    label: "Aruba",
+    imap: { host: "imaps.aruba.it", port: 993, security: "tls" },
+    smtp: { host: "smtps.aruba.it", port: 465, security: "tls" },
+  },
+  {
+    key: "libero",
+    label: "Libero",
+    imap: { host: "imapmail.libero.it", port: 993, security: "tls" },
+    smtp: { host: "smtp.libero.it", port: 465, security: "tls" },
+  },
+  {
+    key: "icloud",
+    label: "iCloud",
+    imap: { host: "imap.mail.me.com", port: 993, security: "tls" },
+    smtp: { host: "smtp.mail.me.com", port: 587, security: "starttls" },
+  },
+  {
+    key: "yahoo",
+    label: "Yahoo",
+    imap: { host: "imap.mail.yahoo.com", port: 993, security: "tls" },
+    smtp: { host: "smtp.mail.yahoo.com", port: 465, security: "tls" },
+  },
+  {
+    key: "gmx",
+    label: "GMX",
+    imap: { host: "imap.gmx.com", port: 993, security: "tls" },
+    smtp: { host: "mail.gmx.com", port: 587, security: "starttls" },
+  },
+  {
+    key: "zoho",
+    label: "Zoho",
+    imap: { host: "imap.zoho.com", port: 993, security: "tls" },
+    smtp: { host: "smtp.zoho.com", port: 465, security: "tls" },
+  },
+  {
+    key: "fastmail",
+    label: "Fastmail",
+    imap: { host: "imap.fastmail.com", port: 993, security: "tls" },
+    smtp: { host: "smtp.fastmail.com", port: 465, security: "tls" },
+  },
+  {
+    key: "posteo",
+    label: "Posteo",
+    imap: { host: "posteo.de", port: 993, security: "tls" },
+    smtp: { host: "posteo.de", port: 465, security: "tls" },
+  },
+]
 
 /** Derives the precompiled SMTP defaults from the IMAP form values. */
 function smtpDefaults(f: FormState): Partial<FormState> {

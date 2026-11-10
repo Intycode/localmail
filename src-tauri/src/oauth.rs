@@ -152,8 +152,7 @@ fn open_url(url: &str) -> Result<(), String> {
     let mut cmd = {
         use std::os::windows::process::CommandExt;
         let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "start", "", url])
-            .creation_flags(0x0800_0000); // niente flash di console
+        c.args(["/C", "start", "", url]).creation_flags(0x0800_0000); // niente flash di console
         c
     };
     #[cfg(target_os = "linux")]
@@ -300,6 +299,32 @@ Connection: close
     Ok((email, refresh))
 }
 
+/// google_refresh exchanges a Google refresh token for (access token, ttl).
+pub fn google_refresh(
+    app: &tauri::AppHandle,
+    refresh_token: &str,
+) -> Result<(String, u64), String> {
+    let cfg = load_config(app)?;
+    let tokens = token_post(&[
+        ("client_id", &cfg.client_id),
+        ("client_secret", &cfg.client_secret),
+        ("grant_type", "refresh_token"),
+        ("refresh_token", refresh_token),
+    ])?;
+    let access = tokens
+        .get("access_token")
+        .and_then(|x| x.as_str())
+        .ok_or_else(|| {
+            "access_token mancante nel refresh (token revocato? riautorizza l'account)".to_string()
+        })?
+        .to_string();
+    let ttl = tokens
+        .get("expires_in")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(3600);
+    Ok((access, ttl))
+}
+
 // --- token lifecycle (used by account_sync / account_send) ---
 
 /// effective_secret maps the stored account secret to the credential the
@@ -332,26 +357,7 @@ pub fn effective_secret(
         if cached.get("provider").and_then(|x| x.as_str()) == Some("microsoft-oauth") {
             microsoft_refresh(app, password_secret)?
         } else {
-            let cfg = load_config(app)?;
-            let tokens = token_post(&[
-                ("client_id", &cfg.client_id),
-                ("client_secret", &cfg.client_secret),
-                ("grant_type", "refresh_token"),
-                ("refresh_token", password_secret),
-            ])?;
-            let access = tokens
-                .get("access_token")
-                .and_then(|x| x.as_str())
-                .ok_or_else(|| {
-                    "access_token mancante nel refresh (token revocato? riautorizza l'account)"
-                        .to_string()
-                })?
-                .to_string();
-            let ttl = tokens
-                .get("expires_in")
-                .and_then(|x| x.as_u64())
-                .unwrap_or(3600);
-            (access, ttl)
+            google_refresh(app, password_secret)?
         };
 
     // keep "provider": without it the next refresh of a Microsoft account
