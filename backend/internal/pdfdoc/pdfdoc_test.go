@@ -1,16 +1,11 @@
 package pdfdoc
 
 // Tests build minimal but VALID PDFs in memory (computed xref offsets) so
-// both extraction contracts run without fixtures or external tools:
-//   - a text PDF (text object with Helvetica);
-//   - a "scanned" PDF (image XObject only, no text layer) for the vision
-//     rendering path.
+// extraction runs without fixtures or external tools (a text PDF built with
+// a Helvetica text object).
 
 import (
-	"bytes"
-	"compress/flate"
 	"fmt"
-	"image/color"
 	"strings"
 	"testing"
 )
@@ -58,35 +53,6 @@ func buildPDF(t *testing.T, lines []string) []byte {
 	return buildPDFFromObjects(objects)
 }
 
-// buildScannedPDF assembles a one-page PDF made of a single 8x8 RGB image
-// XObject (flate-compressed raw pixels): a real "scanned" page — no text
-// layer, just pixels. Used by the vision rendering tests.
-func buildScannedPDF(t *testing.T) []byte {
-	t.Helper()
-	const w, h = 8, 8
-	raw := make([]byte, 0, w*h*3)
-	for y := range h {
-		for x := range w {
-			c := color.RGBA{R: uint8(x * 30), G: uint8(y * 30), B: 128, A: 255}
-			raw = append(raw, c.R, c.G, c.B)
-		}
-	}
-	var flateBuf bytes.Buffer
-	fw, _ := flate.NewWriter(&flateBuf, flate.DefaultCompression)
-	_, _ = fw.Write(raw)
-	_ = fw.Close()
-	img := flateBuf.Bytes()
-
-	content := "q 8 0 0 8 0 0 cm /Im0 Do Q"
-	objects := []string{
-		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 8 8] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>",
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
-		fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length %d >>\nstream\n", w, h, len(img)) + string(img) + "\nendstream",
-	}
-	return buildPDFFromObjects(objects)
-}
 
 func TestExtractReadsText(t *testing.T) {
 	pdf := buildPDF(t, []string{"Ciao dal PDF di prova", "Seconda riga: preventivo 1.200 EUR"})
@@ -133,48 +99,5 @@ func TestExtractScanLikePDFIsEmpty(t *testing.T) {
 func TestExtractRejectsNonPDF(t *testing.T) {
 	if _, _, err := Extract([]byte("questo non è un pdf"), 0); err == nil {
 		t.Fatal("input non-PDF accettato")
-	}
-}
-
-func TestRenderPagesScannedPDF(t *testing.T) {
-	pdf := buildScannedPDF(t)
-
-	// the same document yields NO text: it is genuinely "scanned"
-	text, _, err := Extract(pdf, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.TrimSpace(text) != "" {
-		t.Fatalf("un PDF solo-immagine non deve dare testo: %q", text)
-	}
-
-	pages, err := RenderPages(pdf, RenderOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pages) != 1 {
-		t.Fatalf("pages = %d", len(pages))
-	}
-	if pages[0].Index != 0 || pages[0].MIME != "image/jpeg" {
-		t.Fatalf("page meta: %+v", pages[0])
-	}
-	if !bytes.HasPrefix(pages[0].Data, []byte{0xFF, 0xD8}) {
-		t.Fatalf("output non JPEG: %x", pages[0].Data[:4])
-	}
-}
-
-func TestRenderPagesCapsAndRejects(t *testing.T) {
-	pdf := buildScannedPDF(t)
-	pages, err := RenderPages(pdf, RenderOptions{MaxPages: 1})
-	if err != nil || len(pages) != 1 {
-		t.Fatalf("pages = %d err=%v", len(pages), err)
-	}
-	if _, err := RenderPages([]byte("non è un pdf"), RenderOptions{}); err == nil {
-		t.Fatal("input non-PDF accettato")
-	}
-	// a text PDF renders too (text layer or not, pages are pages)
-	pages, err = RenderPages(buildPDF(t, []string{"hello"}), RenderOptions{})
-	if err != nil || len(pages) != 1 {
-		t.Fatalf("text pdf render: %d err=%v", len(pages), err)
 	}
 }

@@ -24,13 +24,12 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(90); // SMTP session cap (60s
                                                         // so a slow model surfaces the engine's timeout error instead of this bridge
                                                         // giving up first and cutting the UI's loading short.
 const AI_TIMEOUT: Duration = Duration::from_secs(150);
-const SECRET_OPS: [&str; 6] = [
+const SECRET_OPS: [&str; 5] = [
     "accounts.add",
     "sync.start",
     "send",
     "attachment.save",
     "attachment.text",
-    "attachment.images",
 ];
 // engine-internal ops: only Rust may call them (the webview is rejected)
 const ENGINE_INTERNAL_OPS: [&str; 1] = ["secrets.restore"];
@@ -555,29 +554,6 @@ pub async fn attachment_preview(
                 "attachment.preview",
                 json!({"messageId": message_id, "name": name, "secret": secret}),
                 Engine::timeout_for("attachment.text"),
-            )
-        })
-    })
-    .await)
-}
-
-/// attachment_images rasterizes the pages of a PDF attachment for the local
-/// vision path (M12): scanned documents have no text layer, so the
-/// multimodal model reads the rendered pages instead. Same keychain-only
-/// secret discipline as attachment_text.
-#[tauri::command]
-pub async fn attachment_images(
-    state: tauri::State<'_, Arc<Engine>>,
-    account_id: String,
-    message_id: String,
-    name: String,
-) -> Result<Value, ()> {
-    Ok(run_engine(state, move |engine| {
-        engine.account_secret(&account_id).and_then(|secret| {
-            engine.invoke(
-                "attachment.images",
-                json!({"messageId": message_id, "name": name, "secret": secret}),
-                Engine::timeout_for("attachment.images"),
             )
         })
     })

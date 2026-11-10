@@ -560,7 +560,6 @@ export const en: Record<string, string> = {
   "summary.messageCountOne": "1 message",
   "summary.messageCountMany": "{n} messages",
   "summary.readingPdf": "Reading PDF attachment {i} of {n}: {name}",
-  "summary.readingScanned": "Reading pages of scanned PDF {i} of {n}: {name}",
   "summary.emptyResponse": "The model replied with empty text.",
   "summary.failed": "Summary failed: connect the local AI in Settings.",
   "summary.thinking": "The model is thinking…",

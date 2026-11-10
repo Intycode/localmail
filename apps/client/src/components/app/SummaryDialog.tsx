@@ -7,7 +7,6 @@ import {
   buildTranslation,
   TRANSLATION_LANGUAGES,
   type AttachmentText,
-  type ScannedAttachment,
   type TranslationLanguage,
 } from "@/lib/aiPrompt"
 import { useT } from "@/lib/i18n"
@@ -115,11 +114,10 @@ export function SummaryDialog({ thread, messages }: SummaryDialogProps): React.J
     setState({ status: "loading", threadId: thread.id })
     try {
       // 1. PDF attachments: engine-side extraction, sequential so a mailbox
-      // with many files never hammers the IMAP server in parallel. Empty
-      // text = scanned document: its pages go to the vision path instead.
+      // with many files never hammers the IMAP server in parallel. Scanned
+      // PDFs (empty text) are skipped.
       const pdfs = pdfAttachments(messages)
       const texts: AttachmentText[] = []
-      const scanned: { messageId: string; accountId: string; name: string }[] = []
       for (let i = 0; i < pdfs.length; i++) {
         if (runId.current !== id) return
         const p = pdfs[i]
@@ -132,39 +130,15 @@ export function SummaryDialog({ thread, messages }: SummaryDialogProps): React.J
           const res = await attachmentService.text(p.accountId, p.messageId, p.name)
           const text = res.text.trim()
           if (text) texts.push({ messageId: p.messageId, name: p.name, text })
-          else scanned.push(p)
         } catch {
           // unreadable (protected, offline server): skip it — the prompt
           // covers only what the model actually gets
         }
       }
-      // 2. scanned PDFs: rendered pages for the multimodal model
-      const scannedOut: ScannedAttachment[] = []
-      for (let i = 0; i < scanned.length; i++) {
-        if (runId.current !== id) return
-        const p = scanned[i]
-        setState({
-          status: "loading",
-          threadId: thread.id,
-          note: t("summary.readingScanned", { i: i + 1, n: scanned.length, name: p.name }),
-        })
-        try {
-          const res = await attachmentService.images(p.accountId, p.messageId, p.name)
-          scannedOut.push({
-            messageId: p.messageId,
-            name: p.name,
-            pages: res.pages.map((pg) => `data:${pg.mime};base64,${pg.data}`),
-            totalPages: res.totalPage,
-          })
-        } catch {
-          // rendering failed (corrupt PDF, non-vision server errors later):
-          // skip, the summary proceeds on the remaining content
-        }
-      }
       if (runId.current !== id) return
-      // 3. generation
+      // 2. generation
       setState({ status: "loading", threadId: thread.id })
-      const res = await aiService.chat(buildThreadSummary(thread, messages, texts, scannedOut))
+      const res = await aiService.chat(buildThreadSummary(thread, messages, texts))
       if (runId.current !== id) return // dialog moved on: ignore stale result
       const content = res.content.trim()
       if (!content) {

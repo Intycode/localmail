@@ -216,7 +216,7 @@ func (s *Server) handleLine(line []byte) {
 // their order matters (markRead then markUnread).
 var slowOps = map[string]bool{
 	"ai.chat": true, "send": true, "accounts.add": true, "sync.start": true,
-	"attachment.save": true, "attachment.text": true, "attachment.images": true, "attachment.preview": true,
+	"attachment.save": true, "attachment.text": true, "attachment.preview": true,
 	"export.message": true, "export.mailbox": true, "import.mails": true,
 }
 
@@ -309,7 +309,6 @@ var ops = map[string]handler{
 	"send":               opSend,
 	"attachment.save":    opAttachmentSave,
 	"attachment.text":    opAttachmentText,
-	"attachment.images":  opAttachmentImages,
 	"attachment.preview": opAttachmentPreview,
 	"draft.save":         opDraftSave,
 	"draft.delete":       opDraftDelete,
@@ -1870,74 +1869,6 @@ func opAttachmentText(_ context.Context, app *App, params json.RawMessage) (any,
 		"chars":     len([]rune(text)),
 		"truncated": truncated,
 		"pages":     pdfdoc.PageCount(data),
-	}, nil
-}
-
-// maxAttachmentImagePages renders at most this many pages per scanned PDF:
-// each page costs ~100-300 KB on the wire and 3-4 pages carry the substance
-// of virtually every mail attachment.
-const maxAttachmentImagePages = 4
-
-// opAttachmentImages rasterizes the pages of a PDF attachment (M12 vision
-// path): scanned documents have no text layer, so the local multimodal model
-// reads the pages as images instead. JPEG, downscaled, base64-free (the UI
-// base64s nothing — the op returns raw bytes encoded by JSON marshal).
-func opAttachmentImages(_ context.Context, app *App, params json.RawMessage) (any, error) {
-	var p struct {
-		MessageID string `json:"messageId"`
-		Name      string `json:"name"`
-		Secret    string `json:"secret,omitempty"`
-		MaxPages  int    `json:"maxPages,omitempty"`
-	}
-	if err := decode(params, &p); err != nil || p.MessageID == "" || p.Name == "" {
-		return nil, fmt.Errorf("messageId e name sono obbligatori")
-	}
-	if p.MaxPages <= 0 || p.MaxPages > maxAttachmentImagePages {
-		p.MaxPages = maxAttachmentImagePages
-	}
-	msg, err := app.Messages.Get(p.MessageID)
-	if err != nil {
-		return nil, fmt.Errorf("messaggio non trovato")
-	}
-	var att *domain.Attachment
-	for i := range msg.Attachments {
-		if msg.Attachments[i].Name == p.Name {
-			att = &msg.Attachments[i]
-			break
-		}
-	}
-	if att == nil {
-		return nil, fmt.Errorf("allegato %q non presente nel messaggio", p.Name)
-	}
-	lower := strings.ToLower(p.Name)
-	if !strings.Contains(strings.ToLower(att.ContentType), "pdf") && !strings.HasSuffix(lower, ".pdf") {
-		return nil, fmt.Errorf("rendering disponibile solo per allegati PDF")
-	}
-	if att.Size > maxAttachmentTextBytes {
-		return nil, fmt.Errorf("PDF troppo grande per il rendering (max 50 MB)")
-	}
-	data, err := fetchAttachmentPart(app, p.MessageID, p.Name, p.Secret)
-	if err != nil {
-		return nil, err
-	}
-	pages, err := pdfdoc.RenderPages(data, pdfdoc.RenderOptions{MaxPages: p.MaxPages})
-	if err != nil {
-		return nil, err
-	}
-	type pageOut struct {
-		Index int    `json:"index"`
-		MIME  string `json:"mime"`
-		Data  []byte `json:"data"`
-	}
-	out := make([]pageOut, 0, len(pages))
-	for _, pg := range pages {
-		out = append(out, pageOut{Index: pg.Index, MIME: pg.MIME, Data: pg.Data})
-	}
-	return map[string]any{
-		"name":      p.Name,
-		"pages":     out,
-		"totalPage": pdfdoc.PageCount(data),
-		"rendered":  len(out),
 	}, nil
 }
 

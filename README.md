@@ -57,8 +57,7 @@ Optional AI runs **only** on a local server you own — off by default.
 - **Optional local AI** — connect your own **Ollama** or any
   **OpenAI-compatible** server (LM Studio, llama.cpp…). Powers on-device
   thread **summaries** with **translations**, and semantic search. Text-layer
-  PDFs are extracted engine-side (pure Go); **scanned** PDFs are rasterized
-  and read by a **multimodal** model (Mistral Small, Qwen2.5-VL, Gemma…).
+  PDFs are extracted engine-side (pure Go); scanned PDFs are not read.
   Non-loopback endpoints are refused unless explicitly allowed; with the
   server off, the app works exactly as before.
 - **Privacy by construction** — passwords live in the **OS keychain** and
@@ -185,7 +184,7 @@ intymail/
 │   │   ├── search/         # FTS5 search
 │   │   ├── semantic/       # embeddings for semantic search (local AI)
 │   │   ├── attachment/     # attachment metadata
-│   │   ├── pdfdoc/         # PDF text extraction + page rasterization (MuPDF)
+│   │   ├── pdfdoc/         # PDF text extraction
 │   │   ├── events/         # event bus (sync.*, message.*, thread.*)
 │   │   ├── ipc/            # JSON-lines server: op allowlist, per-op timeouts
 │   │   ├── localai/        # local AI bridge (Ollama / OpenAI-compatible)

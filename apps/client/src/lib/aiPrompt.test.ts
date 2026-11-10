@@ -121,39 +121,6 @@ test("buildThreadSummary: no attachments section when none supplied", () => {
   expect(out[1].content).not.toContain("Allegati PDF:")
 })
 
-test("buildThreadSummary: scanned pages ride the user message as images", () => {
-  const page = (n: number) => `data:image/jpeg;base64,${"abcd".repeat(n + 1)}`
-  const out = buildThreadSummary(
-    thread(),
-    [msg({})],
-    [],
-    [{ messageId: "m1", name: "scansione.pdf", pages: [page(0), page(1)], totalPages: 5 }],
-  )
-  expect(out[1].images).toEqual([page(0), page(1)])
-  expect(out[1].content).toContain("Allegati scansionati")
-  expect(out[1].content).toContain("scansione.pdf (2 pagine allegate come immagini, 3 omesse)")
-  // the system prompt must tell the model what the images are
-  expect(out[0].content).toContain("PDF scansionati")
-})
-
-test("buildThreadSummary: global cap on scanned pages across files", () => {
-  const pages = ["data:image/jpeg;base64,AAA", "data:image/jpeg;base64,BBB"]
-  const out = buildThreadSummary(
-    thread(),
-    [msg({})],
-    [],
-    [
-      { messageId: "m1", name: "a.pdf", pages, totalPages: 2 },
-      { messageId: "m1", name: "b.pdf", pages, totalPages: 2 },
-      { messageId: "m1", name: "c.pdf", pages, totalPages: 2 },
-      { messageId: "m1", name: "d.pdf", pages, totalPages: 2 },
-    ],
-  )
-  // MAX_SCANNED_PAGES = 6: a(2) + b(2) + c(2) fit, d is cited but skipped
-  expect(out[1].images).toHaveLength(6)
-  expect(out[1].content).toContain("d.pdf (pagine non incluse per limite)")
-})
-
 test("buildTranslation: system + user carrying the content and target language", () => {
   const out = buildTranslation("- Punto chiave\n- Da fare: rispondere", "en")
   expect(out).toHaveLength(2)

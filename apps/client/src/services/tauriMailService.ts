@@ -214,21 +214,6 @@ export const attachmentService = {
   ): Promise<{ mime: string; data: string; size: number }> {
     return tauriInvoke("attachment_preview", { accountId, messageId, name })
   },
-  /** Rendered pages of a PDF attachment (M12 vision path): for scanned
-   *  documents the multimodal model reads the JPEG pages instead. `data`
-   *  arrives base64-encoded (engine []byte → JSON string). */
-  async images(
-    accountId: string,
-    messageId: string,
-    name: string,
-  ): Promise<{
-    name: string
-    rendered: number
-    totalPage: number
-    pages: { index: number; mime: string; data: string }[]
-  }> {
-    return tauriInvoke("attachment_images", { accountId, messageId, name })
-  },
 }
 
 // The engine marshals empty Go slices as JSON null; normalize entity fields

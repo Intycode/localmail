@@ -42,7 +42,6 @@ pub fn run() {
             engine::attachment_open,
             engine::attachment_download,
             engine::attachment_text,
-            engine::attachment_images,
             engine::attachment_preview,
             engine::account_remove,
             oauth_google_start,
