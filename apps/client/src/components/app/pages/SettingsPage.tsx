@@ -234,6 +234,9 @@ export function SettingsPage() {
           </Section>
 
           <p className="text-xs text-muted-foreground">{t("settings.autoSaved")}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("settings.version", { version: __APP_VERSION__ })}
+          </p>
         </div>
       </div>
     </PageBody>

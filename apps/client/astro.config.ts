@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url"
+import { readFileSync } from "node:fs"
 import { defineConfig } from "astro/config"
 import react from "@astrojs/react"
 import tailwindcss from "@tailwindcss/vite"
@@ -16,11 +17,15 @@ import tailwindcss from "@tailwindcss/vite"
  * asset URLs for `base: "./"` (it prefixes them with "/./" and breaks them),
  * so a relative base is deliberately not configured.
  */
+// Single source of truth: the root package.json version.
+const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"))
+
 export default defineConfig({
   output: "static",
   integrations: [react()],
   vite: {
     plugins: [tailwindcss()],
+    define: { __APP_VERSION__: JSON.stringify(version) },
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),

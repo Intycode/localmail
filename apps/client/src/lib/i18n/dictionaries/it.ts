@@ -383,6 +383,7 @@ export const it: Record<string, string> = {
   "settings.title": "Impostazioni",
   "settings.description": "Velocità e privacy prima di tutto. Tutto resta sul tuo dispositivo.",
   "settings.autoSaved": "Le modifiche vengono salvate automaticamente.",
+  "settings.version": "Mail v{version}",
   "settings.sections": "Sezioni delle impostazioni",
   "settings.general": "Generale",
   "settings.syncOnStart": "Sincronizza all'avvio",
