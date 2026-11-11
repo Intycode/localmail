@@ -106,6 +106,19 @@ impl Engine {
         )
     }
 
+    /// is_running reports whether an engine child is alive right now. Never
+    /// spawns one.
+    pub(crate) fn is_running(&self) -> bool {
+        if self.dead.load(std::sync::atomic::Ordering::SeqCst) {
+            return false;
+        }
+        let mut child = self.child.lock().unwrap();
+        child
+            .as_mut()
+            .map(|c| matches!(c.try_wait(), Ok(None)))
+            .unwrap_or(false)
+    }
+
     fn ensure_spawned(&self) -> Result<(), String> {
         {
             // dropped before restore_secrets, which re-enters ensure_spawned
@@ -242,7 +255,7 @@ impl Engine {
     /// credentials from the OS keychain and re-delivers them via the
     /// engine-internal "secrets.restore" op. Only this Rust path may call
     /// that op (engine_invoke rejects it).
-    fn restore_secrets(&self) -> Result<usize, String> {
+    pub(crate) fn restore_secrets(&self) -> Result<usize, String> {
         let accounts = self.invoke("accounts.list", json!({}), DEFAULT_TIMEOUT)?;
         let mut secrets: Vec<Value> = Vec::new();
         if let Some(list) = accounts.as_array() {

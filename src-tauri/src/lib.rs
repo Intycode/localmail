@@ -22,7 +22,22 @@ pub fn run() {
                 .expect("app data dir non disponibile");
             std::fs::create_dir_all(&data_dir).expect("creazione app data dir");
             let engine = engine::Engine::new(app.handle().clone(), data_dir.join("mail.db"));
-            app.manage(std::sync::Arc::new(engine));
+            let engine = std::sync::Arc::new(engine);
+            app.manage(engine.clone());
+
+            // OAuth access tokens last ~1 h and the engine only receives them
+            // at spawn/sync: re-deliver fresh ones (restore_secrets renews
+            // them) while the engine runs. Never starts the engine itself.
+            // The engine may die between is_running() and restore_secrets():
+            // that call would respawn it, which is harmless.
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(45 * 60));
+                if engine.is_running() {
+                    if let Err(e) = engine.restore_secrets() {
+                        eprintln!("engine: rinnovo segreti periodico non riuscito: {}", e);
+                    }
+                }
+            });
 
             // The title bar is drawn by the webview (TitleBar.tsx): make sure
             // the native frame is gone at runtime too, not just via the
