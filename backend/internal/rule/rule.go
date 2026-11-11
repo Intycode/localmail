@@ -4,12 +4,13 @@
 package rule
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"mail/backend/internal/domain"
 )
@@ -121,9 +122,12 @@ func boolInt(b bool) int {
 	return 0
 }
 
-// newRuleID returns a short unique id (time + counter fallback).
+// newRuleID returns a short random id. Not time-based: Windows clock ticks are
+// coarse, so back-to-back saves got equal ids and INSERT OR REPLACE overwrote.
 func newRuleID() string {
-	return "r-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "r-" + hex.EncodeToString(b)
 }
 
 // Matching returns the enabled rules whose condition matches the message, in
