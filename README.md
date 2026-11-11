@@ -2,343 +2,256 @@
 
 # Mail
 
-**A super-minimal, fast, local-first, privacy-first email client.**
+**A minimal, fast, local-first email client that keeps your mail on your device.**
 
-Native desktop (macOS / Windows / Linux) and mobile (iOS / Android).
-No cloud, no accounts, no tracking, no ads, no billing.
-Optional AI runs **only** on a local server you own — off by default.
+No cloud backend, no sign-up, no telemetry, no ads.
+Optional AI features run only on a local model server that you run yourself.
 
-> One email client. Your mail stays on your device.
-
-[![CI](https://github.com/Intycode-Sagl/intymail/actions/workflows/ci.yml/badge.svg)](https://github.com/Intycode-Sagl/intymail/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/Intycode-Sagl/intymail?include_prereleases)](https://github.com/Intycode-Sagl/intymail/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey)](#download)
+![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
+![Status](https://img.shields.io/badge/status-early%20(v0.1)-orange)
 
 </div>
 
 ---
 
-## Table of contents
+Mail is a desktop email client built with Tauri, Astro and a Go engine. Your
+messages live in an **encrypted SQLite database on your machine**. The interface
+reads from that database right away, and a background sync keeps it up to date.
+Passwords and keys go in the operating system keychain and nowhere else.
+
+> **Status:** early software (v0.1). It is used every day by its author, but
+> expect rough edges. There are no prebuilt binaries yet:
+> [build it from source](#build-from-source).
+
+## Contents
 
 - [Features](#features)
-- [Download](#download)
-- [What Mail is — and is not](#what-mail-is--and-is-not)
+- [Build from source](#build-from-source)
+- [Adding accounts](#adding-accounts)
 - [Architecture](#architecture)
-- [Stack](#stack)
-- [Repository structure](#repository-structure)
 - [Development](#development)
-- [Testing](#testing)
-- [Build & release](#build--release)
+- [Documentation](#documentation)
 - [Roadmap](#roadmap)
 - [Privacy](#privacy)
-- [Security](#security)
 - [Contributing](#contributing)
-- [Non-goals](#non-goals)
+- [Security](#security)
 - [License](#license)
-
----
 
 ## Features
 
-- **Local-first** — the UI renders from your local SQLite database instantly;
-  a background sync keeps it up to date. The UI never waits on the network for
-  data it already has, and never polls.
-- **Real IMAP + SMTP** — generic IMAP provider (go-imap v2): UID-incremental
-  sync, `BODY.PEEK`, SPECIAL-USE folder mapping, deletion reconciliation,
-  UIDVALIDITY handling. SMTP send with attachments, drafts, undo-send, snooze,
-  rules.
-- **Thread resolution** — conversations stitched by Message-ID / References
-  with a subject fallback, persisted locally.
-- **Full-text search** — SQLite FTS5 over subject/sender/recipient/body, plus
-  optional **semantic search** (local embeddings).
-- **Attachments** — preview, download, export; PDFs open with the OS default
-  app.
-- **Optional local AI** — connect your own **Ollama** or any
-  **OpenAI-compatible** server (LM Studio, llama.cpp…). Powers on-device
-  thread **summaries** with **translations**, and semantic search. Text-layer
-  PDFs are extracted engine-side (pure Go); scanned PDFs are not read.
-  Non-loopback endpoints are refused unless explicitly allowed; with the
-  server off, the app works exactly as before.
-- **Privacy by construction** — passwords live in the **OS keychain** and
-  never touch SQLite, logs, or the webview. HTML is sanitized (DOMPurify +
-  CSP), remote content is blocked, tracking pixels never load.
-- **Keyboard-first & responsive** — `j/k` navigation, `r` to compose, `Esc`,
-  on-screen hints. System/Light/Dark theme with no flash of wrong theme.
-- **Zero-config start** — works with no accounts configured; no seeded data,
-  no invented threads.
+**Accounts and sync**
 
----
+- Generic **IMAP/SMTP** with UID-incremental sync, SPECIAL-USE folder mapping
+  and multi-folder **IDLE push**
+- **Gmail** via OAuth2 (PKCE with a loopback redirect, XOAUTH2)
+- **Microsoft / Outlook** via Microsoft Graph (OAuth2 device-code flow)
+- **JMAP** (Fastmail, Stalwart) with native push
+- Provider presets in the account setup, and an onboarding wizard on first launch
 
-## Download
+**Reading and organizing**
 
-Prebuilt bundles (dmg, msi, AppImage, deb) are attached to the
-[GitHub Releases](https://github.com/Intycode-Sagl/intymail/releases) page.
-Binaries are currently **unsigned**:
+- Conversations grouped into threads by Message-ID and References
+- Instant full-text search (SQLite FTS5)
+- Rules (sender, recipient, subject, body, attachments, spam score), snooze, move, archive
+- Local spam and phishing heuristics, with no message sent to any external service
+- Attachment preview, download and export
+- Desktop notifications
 
-- **macOS** — Gatekeeper blocks the first launch. Unblock with:
-  `xattr -cr /Applications/Mail.app` (or right-click → Open).
-- **Windows** — SmartScreen: click "More info" → "Run anyway".
-- **Linux** — `chmod +x Mail.AppImage && ./Mail.AppImage`, or install the deb.
+**Writing**
 
-> Builds are manual downloads: no auto-update, no proprietary channels.
+- Drafts, undo send and scheduled send through an offline-capable outbox
+- Attachments and recipient autocomplete
+- **OpenPGP** (PGP/Inline): generate or import keys, encrypt and sign the message
+  text, decrypt and verify incoming mail
 
----
+**Privacy and data ownership**
 
-## What Mail is — and is not
+- Database **encrypted at rest**; the key is kept in the OS keychain
+- Remote content blocked by default: HTML is sanitized (DOMPurify + CSP), so
+  tracking pixels and remote images never load
+- **Import/export** of `mbox` and `eml` files
+- **Encrypted database backup and restore**, with an optional daily automatic backup
 
-**It is:** a real application UI — keyboard-friendly, responsive, with a
-System/Light/Dark theme switchable from Settings — built on a deliberately
-small stack.
+**Optional local AI** (off by default)
 
-**It is NOT:** a marketing site, an Electron app, a Next.js SPA, a
-cloud-hosted product, or something that phones home. There are no proprietary
-cloud services, no analytics, no telemetry, no ads, no cloud AI, no billing,
-no subscriptions, no social login, and no separate web version.
+- Connect your own **Ollama** or any **OpenAI-compatible** server (LM Studio,
+  llama.cpp…)
+- Thread summaries, translations and semantic search
+- Only loopback endpoints are allowed unless you explicitly allow a remote one.
+  When the AI server is off, nothing changes.
 
----
+**Interface**
+
+- Keyboard-first: `j`/`k` to move, `r` to compose, `Esc` to go back
+- System, light and dark themes, with accent colors
+- English and Italian
+
+## Build from source
+
+### Prerequisites
+
+- [Bun](https://bun.sh) ≥ 1.1 and Node.js ≥ 22.12
+- [Go](https://go.dev) ≥ 1.27
+- [Rust](https://rustup.rs) (stable) and the
+  [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS
+
+### Run in development
+
+```sh
+bun install
+bun run engine:build   # compile the Go engine into src-tauri/binaries/
+bun run tauri:dev      # build the UI and open the app window
+```
+
+### Build a native bundle
+
+```sh
+bun run engine:build
+bun run build
+bunx tauri build --config src-tauri/tauri.conf.json
+```
+
+Bundles (`.app`/`.dmg`, `.msi`, `.AppImage`/`.deb`) end up in
+`src-tauri/target/release/bundle/`. They are unsigned. On macOS, the first time
+you open the app, right-click it and choose **Open**. To build signed bundles,
+see [docs/signing.md](docs/signing.md).
+
+## Adding accounts
+
+| Provider               | What you need                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| IMAP/SMTP              | Server settings (or a preset) and your password or app password                                        |
+| JMAP                   | Session URL and an API token, see [docs/jmap.md](docs/jmap.md)                                         |
+| Gmail                  | Your own Google OAuth client in `oauth.json`, see [docs/oauth.md](docs/oauth.md)                       |
+| Microsoft / Outlook    | Your own Azure app registration (client ID) in `oauth.json`, see [docs/oauth.md](docs/oauth.md)        |
+
+Mail does not ship any OAuth credentials. For Gmail and Microsoft you register
+your own OAuth client once, so no third party is involved.
 
 ## Architecture
 
 ```
 ┌───────────────────────────────┐
-│  Astro UI + React islands     │  keyboard nav, stores, services
-│  (apps/client, shadcn/ui)     │  renders instantly from local SQLite
+│  UI: Astro + React islands    │  shadcn/ui, keyboard nav, observable stores
+│  apps/client                  │  renders straight from local data
 └──────────────┬────────────────┘
-               │ IPC (structured events, no UI→engine coupling)
+               │ Tauri IPC
 ┌──────────────▼────────────────┐
-│  Tauri 2  (src-tauri)         │  THIN native layer:
-│                               │  window + webview + keychain bridge
-│                               │  NO email business logic here
+│  Tauri 2 shell  (src-tauri)   │  window, OS keychain, file dialogs, OAuth
+│                               │  no email business logic
 └──────────────┬────────────────┘
-               │ spawn / bridge
+               │ JSON-lines over stdio (sidecar process)
 ┌──────────────▼────────────────┐
-│  Go engine  (backend/)        │  sync engine, thread resolution,
-│                               │  IMAP/SMTP/MIME, FTS5 search
+│  Go engine  (backend)         │  sync, IMAP/SMTP/Graph/JMAP, MIME, threads,
+│                               │  search, rules, PGP, local AI bridge
 └──────────────┬────────────────┘
-               │ SQLite = local source of truth
+               │
 ┌──────────────▼────────────────┐
-│  SQLite (FTS5)                │  accounts, threads, messages, search
+│  SQLite + FTS5 (encrypted)    │  the single source of truth
 └───────────────────────────────┘
 ```
 
-**Local-first flow:**
+1. The UI renders from SQLite right away.
+2. Background sync: provider → engine → SQLite.
+3. The engine sends events to the UI stores. The UI never polls.
 
-1. Render from local SQLite immediately.
-2. Background sync → provider → engine → SQLite.
-3. SQLite update → events → frontend stores.
-4. No polling in the UI.
+| Layer   | Choice                            | Why                                             |
+| ------- | --------------------------------- | ----------------------------------------------- |
+| Native  | Tauri 2 (Rust)                    | small binaries, thin shell, keychain access     |
+| UI      | Astro 7 + React 19 + shadcn/ui    | static output, one island per page, Tailwind 4  |
+| Engine  | Go (pure Go, no CGO)              | one compiled binary that cross-compiles easily  |
+| Storage | SQLite + FTS5                     | local source of truth and full-text search      |
+| Tooling | Bun + TypeScript (strict)         | fast installs, scripts and tests                |
 
-Long-running operations (AI inference, IMAP/SMTP round-trips) run off the
-main thread: the UI stays responsive while the engine works.
+More detail: [docs/architecture.md](docs/architecture.md) and the IPC contract in
+[docs/ipc.md](docs/ipc.md).
 
----
-
-## Stack
-
-| Layer      | Choice         | Why                                                       |
-| ---------- | -------------- | --------------------------------------------------------- |
-| Native     | **Tauri 2**    | ~MB binaries, Rust thin shell, OS keychain access         |
-| UI         | **Astro 7**    | static output, islands architecture, tiny bundle          |
-| Components | **shadcn/ui**  | owned Radix primitives + Tailwind 4 tokens, React islands |
-| Language   | **TypeScript** | strict mode, shared types contract                        |
-| Runtime    | **Bun**        | fast installs / scripts / tests                           |
-| Engine     | **Go**         | compiled mail engine: sync, IMAP, SMTP, FTS5 search       |
-| Storage    | **SQLite**     | local source of truth, FTS5 full-text search              |
-
-Astro owns routing and static output; interactivity lives in one React island
-per page, styled with shadcn/ui on Tailwind 4. No Svelte, no Next.js, no
-Electron. Architectural simplicity is a hard priority.
-
----
-
-## Repository structure
+### Repository layout
 
 ```
-intymail/
-├── package.json            # bun workspace root + scripts
-├── bunfig.toml             # install cache inside workspace
-├── apps/client/            # Astro UI + React islands (shadcn/ui)
-│   ├── astro.config.ts     # static output, React integration, "@" alias
-│   ├── components.json     # shadcn/ui config (radix-nova preset, "@/…" aliases)
-│   └── src/
-│       ├── pages/          # thin Astro shells: /, /thread/[id], /compose, /search, /settings, /accounts
-│       ├── components/
-│       │   ├── ui/         # shadcn/ui primitives (button, sidebar, dialog, …)
-│       │   └── app/        # React islands: AppShell, AppSidebar + page components
-│       ├── services/       # MailService, Tauri bridge, local store, search, sync, registry
-│       ├── stores/         # observable stores (no Redux)
-│       ├── lib/            # i18n, format, prompt builders, theme, settings, utils (cn)
-│       └── styles/         # global.css — Tailwind 4 + shadcn tokens, class-based dark
-├── packages/shared-types/  # single source of truth: TS types
-├── backend/                # Go mail engine
-│   ├── cmd/mail/           # engine entrypoint (--serve runs the IPC server)
-│   ├── internal/
-│   │   ├── domain/         # Go structs mirroring shared-types
-│   │   ├── account/        # accounts + folders
-│   │   ├── auth/           # SecureStorage (OS keychain via Tauri)
-│   │   ├── database/       # SQLite open + migrations
-│   │   ├── email/          # imap/ (transport), smtp/ (send), mime/ (parser)
-│   │   ├── sync/           # Sync Engine pipeline
-│   │   ├── thread/         # thread resolution + persistence
-│   │   ├── search/         # FTS5 search
-│   │   ├── semantic/       # embeddings for semantic search (local AI)
-│   │   ├── attachment/     # attachment metadata
-│   │   ├── pdfdoc/         # PDF text extraction
-│   │   ├── events/         # event bus (sync.*, message.*, thread.*)
-│   │   ├── ipc/            # JSON-lines server: op allowlist, per-op timeouts
-│   │   ├── localai/        # local AI bridge (Ollama / OpenAI-compatible)
-│   │   ├── queue/          # outbound operation queue
-│   │   ├── rule/           # user rules engine
-│   │   ├── assess/         # spam/phishing heuristics
-│   │   ├── pgp/            # OpenPGP message handling
-│   │   ├── provider/       # MailProvider contract: real IMAP + Mock
-│   │   └── message/, mbox/, queue/, rule/, assess/, …
-│   └── migrations/         # SQL schema, FTS5, indexes (go:embed)
-├── src-tauri/              # Tauri 2 thin native layer
-│   ├── src/                # engine.rs (IPC bridge), secrets.rs (keychain), pgp.rs, oauth.rs
-│   └── capabilities/
-├── scripts/                # project scripts (security-check, …)
-├── docs/                   # architecture.md, ipc.md, security.md, roadmap.md, signing.md
-└── README.md
+apps/client/            Astro UI: pages, React components, services, stores, i18n
+packages/shared-types/  TypeScript types shared with the engine
+backend/                Go engine: cmd/mail (entrypoint), internal/* (sync, email,
+                        thread, search, rule, pgp, localai, …), migrations/
+src-tauri/              Tauri shell: engine bridge, keychain, OAuth, PGP, paths
+scripts/                build, quality-gate and security scripts
+docs/                   architecture, IPC, security, OAuth, JMAP, signing, roadmap
 ```
-
----
 
 ## Development
 
-### Prerequisites
-
-- [Bun](https://bun.sh) ≥ 1.4
-- [Go](https://go.dev) ≥ 1.24
-- [Rust](https://rustup.rs) (stable) — Tauri 2 requirements per platform
-
-### Commands
-
 ```sh
-bun install           # install JS workspace (cache inside workspace)
-bun run engine:build  # build the Go engine binary (src-tauri/binaries/mail-engine)
-bun run tauri:dev     # build UI then launch the Tauri window
+bun run dev                  # UI only in the browser (no engine, no real data)
+bun run check                # strict TypeScript + astro check
+bun run test                 # frontend unit tests (bun test)
+bun run lint                 # prettier --check
+bun run format               # prettier --write
 
-bun run dev           # Astro dev server (browser-only, without the engine)
-bun run build         # static build (apps/client/dist)
-bun run test          # bun test (unit tests)
-bun run check         # tsc --noEmit + astro check (strict TS)
-bun run lint          # prettier --check
-bun run format        # prettier --write
+bun run backend:test         # go test ./...
+bun run backend:vet          # go vet ./...
 
-bun run backend:test  # go test ./...
-bun run backend:vet   # go vet ./...
-bun run backend:build # go build ./...
-bun run backend:run   # go run ./cmd/mail (smoke mode, no IPC)
-
+bash scripts/check-all.sh    # every quality gate, frontend and backend
 bash scripts/security-check  # govulncheck + cargo audit (when installed)
 ```
 
-Quality gates: strict TypeScript, prettier, `go fmt`, `go vet`,
-`.editorconfig`, minimal dependencies.
+## Documentation
 
----
+| Document                                   | Topic                                                    |
+| ------------------------------------------ | -------------------------------------------------------- |
+| [architecture.md](docs/architecture.md)    | Principles, data flow, layer responsibilities, events    |
+| [ipc.md](docs/ipc.md)                      | Engine operations and the IPC protocol                   |
+| [security.md](docs/security.md)            | Threat model, encryption, secrets, hostile content       |
+| [oauth.md](docs/oauth.md)                  | Gmail and Microsoft OAuth setup                          |
+| [jmap.md](docs/jmap.md)                    | JMAP accounts                                            |
+| [signing.md](docs/signing.md)              | Code signing and distribution                            |
+| [roadmap.md](docs/roadmap.md)              | Phases and status                                        |
 
-## Testing
-
-- **Frontend:** strict TS (`tsc --noEmit` + `astro check`) and unit tests of
-  the core services, stores, and prompt builders (`bun test`).
-- **Backend:** Go tests for database, thread, sync, mock provider, and FTS5
-  search (`go test ./...`), plus `go vet ./...`.
-- **CI:** GitHub Actions runs the frontend and backend gates on every push
-  (`.github/workflows/ci.yml`).
-
----
-
-## Build & release
-
-Tauri bundles the Astro static build into a native window together with the Go
-engine (sidecar, `bundle.externalBin`).
-
-### Local build
-
-```sh
-bun run engine:build   # build the engine (also the sidecar with target triples)
-bun run tauri:build    # frontend + native bundle (dmg/msi/AppImage)
-```
-
-Artifacts land in `src-tauri/target/release/bundle/`.
-
-### Cutting a release
-
-1. Make sure the tests are green (CI runs on every push).
-2. `git tag vX.Y.Z && git push origin vX.Y.Z` — the workflow
-   (`.github/workflows/release.yml`) builds bundles for macOS (ARM + Intel),
-   Windows and Linux, and creates a **draft GitHub Release** with the
-   artifacts and SHA-256 checksums.
-3. Review the draft, publish. Optional code signing is documented in
-   [docs/signing.md](docs/signing.md) (requires Apple Developer Program /
-   Windows certificate).
-
----
+Some documents are written in Italian.
 
 ## Roadmap
 
-|                    Phase | Scope                                                                                              |
-| -----------------------: | -------------------------------------------------------------------------------------------------- |
-|        **1. Foundation** | this repo: stack, empty local store, SQLite/FTS5, Go engine, IPC shape, tests                      |
-|             **2. Gmail** | Gmail provider, OAuth (OS keychain), real sync/search                                              |
-|         **3. Microsoft** | Microsoft/Outlook provider (Graph), OAuth device-code                                              |
-|     **4. Generic email** | IMAP receive ✅; SMTP send + attachments, IDLE multi-folder, drafts, undo-send/snooze/rules: ✅    |
-| **5. Native experience** | notifications, offline queue, attachments, packaging ✅; optional macOS signing in docs/signing.md |
-|            **6. Mobile** | iOS/Android Tauri shells, mobile keychain, adaptive UI                                             |
-
-See [docs/roadmap.md](docs/roadmap.md) for details.
-
----
+| Phase                | Status                                                                    |
+| -------------------- | ------------------------------------------------------------------------- |
+| 1. Foundation        | ✅ stack, encrypted local store, FTS5, engine, IPC, tests                  |
+| 2. Gmail             | ✅ OAuth2 + XOAUTH2 over IMAP                                              |
+| 3. Microsoft         | ✅ v1 over Graph (polling, limits in [oauth.md](docs/oauth.md))            |
+| 4. Generic email     | ✅ IMAP/SMTP, IDLE, JMAP, drafts, undo send, snooze, rules                 |
+| 5. Native experience | ✅ notifications, offline outbox, attachments, packaging                   |
+| 6. Mobile            | ⏳ planned: iOS/Android Tauri shells, adaptive UI                          |
 
 ## Privacy
 
-- Mail talks only to your IMAP/SMTP server, over **verified TLS** (plaintext
-  is an explicit opt-in). No telemetry, no analytics, no cloud, no cloud AI.
-- The optional AI features talk **only** to the local server the user
-  configured (Ollama / LM Studio — loopback by default; a remote host needs an
-  explicit consent toggle). Nothing is sent anywhere when the server is off.
-- Passwords live only in the **OS keychain**; emails live only in your local
-  **SQLite** database; removing an account purges both.
-- Email content is rendered as plain text by default; HTML is sanitized and
-  remote content is blocked (CSP) — no tracking pixels, no remote images.
+- Mail connects only to your mail servers, over **verified TLS**. Plaintext
+  connections need an explicit opt-in.
+- The only other connections are:
+  - the OAuth endpoints of Google or Microsoft, when you use those accounts;
+  - your local AI server, if you turn it on.
+- There is no telemetry, no analytics and no update check.
+- Passwords, OAuth tokens, PGP private keys and the database key are kept only
+  in the **OS keychain**.
+- Removing an account deletes its mail and its secrets.
 
-Details and the full threat model: **[docs/security.md](docs/security.md)**.
-
----
-
-## Security
-
-Found a vulnerability? Please **do not open a public issue**. Use
-[GitHub's private security advisory](https://github.com/Intycode-Sagl/intymail/security/advisories/new)
-to report it, and we will respond as quickly as we can.
-
----
+The full threat model, including what Mail does **not** protect against, is in
+[docs/security.md](docs/security.md).
 
 ## Contributing
 
-Contributions are welcome!
+Contributions are welcome. Before you start:
 
-1. Fork the repository and create your branch from `main`.
-2. Run the quality gates before opening a PR:
-   `bun run check && bun run test && bun run lint` and `go test ./...`.
-3. Keep PRs focused: one feature or fix per PR, with a clear description.
-4. Architectural consistency matters here — no new frameworks, no new state
-   libraries, no cloud dependencies. When in doubt, open an issue first.
+1. For anything larger than a small fix, open an issue first.
+2. Branch from `main` and keep each PR to one change.
+3. Run `bash scripts/check-all.sh` before you open the PR.
+4. Keep the architecture simple:
+   - no new frameworks or state libraries;
+   - no cloud dependencies;
+   - no email logic in the Tauri layer.
 
----
+## Security
 
-## Non-goals
-
-No proprietary cloud, no user accounts, no analytics, no tracking, no ads, no
-cloud AI (AI runs only on the user's local server, opt-in), no
-billing/subscriptions, no full Gmail/Outlook integration (we integrate via
-provider APIs), no social login, no separate web version.
-
----
+Please **do not open a public issue** for a vulnerability. Report it privately
+through [GitHub Security Advisories](https://github.com/Intycode/mail/security/advisories/new).
 
 ## License
 
-[MIT](LICENSE) © Intycode Sagl
+[MIT](LICENSE) © 2026 Dario Intycode

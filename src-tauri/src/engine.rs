@@ -45,6 +45,9 @@ pub struct Engine {
     pending: Arc<Mutex<HashMap<String, Sender<Value>>>>,
     counter: std::sync::atomic::AtomicU64,
     dead: Arc<std::sync::atomic::AtomicBool>,
+    // write-held while backup/restore touch the db file: blocks respawns
+    // (any concurrent request would otherwise restart the engine mid-copy)
+    gate: std::sync::RwLock<()>,
 }
 
 impl Engine {
@@ -57,7 +60,16 @@ impl Engine {
             pending: Arc::new(Mutex::new(HashMap::new())),
             counter: std::sync::atomic::AtomicU64::new(0),
             dead: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            gate: std::sync::RwLock::new(()),
         }
+    }
+
+    /// stopped runs f with the engine stopped and no respawn possible until
+    /// f returns (the next request restarts it).
+    pub fn stopped<R>(&self, f: impl FnOnce() -> R) -> R {
+        let _gate = self.gate.write().unwrap_or_else(|e| e.into_inner());
+        self.stop();
+        f()
     }
 
     fn resolve_binary() -> Result<PathBuf, String> {
@@ -96,6 +108,8 @@ impl Engine {
 
     fn ensure_spawned(&self) -> Result<(), String> {
         {
+            // dropped before restore_secrets, which re-enters ensure_spawned
+            let _gate = self.gate.read().unwrap_or_else(|e| e.into_inner());
             let mut child = self.child.lock().unwrap();
             let exited = child
                 .as_mut()
@@ -895,20 +909,20 @@ pub async fn backup_create(
         return Ok(envelope(Err(e)));
     }
     Ok(run_engine(state, move |engine| {
-        engine.stop(); // no open handles, no concurrent writes
         let src = engine.db_path.clone();
         if src == std::path::Path::new(&dest) {
             return Err(String::from(
                 "la destinazione coincide col database corrente",
             ));
         }
-        match std::fs::copy(&src, &dest) {
+        // no open handles, no concurrent writes, no respawn mid-copy
+        engine.stopped(|| match std::fs::copy(&src, &dest) {
             Ok(size) => {
                 copy_wal(&src, std::path::Path::new(&dest));
                 Ok(json!({"path": dest, "size": size}))
             }
             Err(e) => Err(format!("backup non riuscito: {}", e)),
-        }
+        })
     })
     .await)
 }
@@ -969,8 +983,7 @@ pub async fn backup_restore(
         //    stays reversible (mail.db.pre-restore.bak, best effort).
         let safety = dest.with_extension("db.pre-restore.bak");
         let _ = std::fs::copy(&dest, &safety);
-        engine.stop();
-        match std::fs::rename(&tmp, &dest) {
+        engine.stopped(|| match std::fs::rename(&tmp, &dest) {
             Ok(_) => {
                 copy_wal(std::path::Path::new(&src), &dest);
                 Ok(json!({"ok": true}))
@@ -987,7 +1000,7 @@ pub async fn backup_restore(
                     e
                 ))
             }
-        }
+        })
     })
     .await)
 }
