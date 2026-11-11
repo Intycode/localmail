@@ -1,13 +1,12 @@
 import * as React from "react"
 import type { SubmitEvent } from "react"
-import { Eye, EyeOff, Loader2, TriangleAlert } from "lucide-react"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { getMailService } from "@/services/serviceRegistry"
 import { isTauri } from "@/services/tauriMailService"
 import { t, useT } from "@/lib/i18n"
 import type { Account, ImapAccountDraft, ImapConfig, SmtpConfig } from "@/types"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -60,17 +59,10 @@ export function AccountConnectForm({
   const [googleStarting, setGoogleStarting] = React.useState(false)
   const [microsoftStarting, setMicrosoftStarting] = React.useState(false)
   const [showPassword, setShowPassword] = React.useState(false)
-  /** last engine error, shown inline inside the dialog: a 4s toast is too
-   *  easy to miss while the modal stays open on failure. */
-  const [submitError, setSubmitError] = React.useState("")
-  const formRef = React.useRef<HTMLFormElement>(null)
-
-  /** Surfaces a failure as the inline alert, scrolled into view: the user
-   *  is typically at the password field when the error lands. The form keeps
-   *  every value, so the fix is an edit + resubmit. */
+  /** Surfaces a failure as a toast, kept up longer than the default: the
+   *  form keeps every value, so the fix is an edit + resubmit. */
   function fail(message: string): void {
-    setSubmitError(message)
-    formRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+    toast.error(t("connect.errorTitle"), { description: message, duration: 10000 })
   }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
@@ -114,7 +106,6 @@ export function AccountConnectForm({
 
   async function submit(e: SubmitEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault()
-    setSubmitError("")
     const found = validate(form)
     setErrors(found)
     if (Object.keys(found).length > 0) return
@@ -184,7 +175,6 @@ export function AccountConnectForm({
       return
     }
     setMicrosoftStarting(true)
-    setSubmitError("")
     let deviceToast: string | number | undefined
     try {
       const svc = await getMailService()
@@ -234,7 +224,6 @@ export function AccountConnectForm({
       return
     }
     setGoogleStarting(true)
-    setSubmitError("")
     try {
       const svc = await getMailService()
       if (!svc.oauthGoogleStart) throw new Error(t("common.engineOnly"))
@@ -291,20 +280,12 @@ export function AccountConnectForm({
           </div>
         )}
         <form
-          ref={formRef}
           id={formId}
           inert={busy}
           className={bodyClassName}
           onSubmit={(e) => void submit(e)}
         >
           <FieldGroup className="gap-4">
-            {submitError && (
-              <Alert variant="destructive" role="alert">
-                <TriangleAlert />
-                <AlertTitle>{t("connect.errorTitle")}</AlertTitle>
-                <AlertDescription className="break-words">{submitError}</AlertDescription>
-              </Alert>
-            )}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Button
                 type="button"
