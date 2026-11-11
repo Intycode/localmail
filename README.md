@@ -8,8 +8,8 @@ No cloud backend, no sign-up, no telemetry, no ads.
 Optional AI features run only on a local model server that you run yourself.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
-![Status](https://img.shields.io/badge/status-early%20(v0.1)-orange)
+![Platforms](https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)%20%7C%20Windows-lightgrey)
+![Status](https://img.shields.io/badge/status-early%20(v0.2)-orange)
 
 </div>
 
@@ -20,9 +20,11 @@ messages live in an **encrypted SQLite database on your machine**. The interface
 reads from that database right away, and a background sync keeps it up to date.
 Passwords and keys go in the operating system keychain and nowhere else.
 
-> **Status:** early software (v0.1). It is used every day by its author, but
-> expect rough edges. There are no prebuilt binaries yet:
-> [build it from source](#build-from-source).
+> **Status:** early software (v0.2.6). It is used every day by its author, but
+> expect rough edges. Installers for **macOS (Apple Silicon)** and **Windows**
+> are on [GitHub Releases](https://github.com/Intycode/localmail/releases) and
+> the app updates itself from there. Intel Macs and Linux are not supported by
+> the releases: [build it from source](#build-from-source).
 
 ## Contents
 
@@ -119,10 +121,11 @@ bun run build
 bunx tauri build --config src-tauri/tauri.conf.json
 ```
 
-Bundles (`.app`/`.dmg`, `.msi`, `.AppImage`/`.deb`) end up in
-`src-tauri/target/release/bundle/`. They are unsigned. On macOS, the first time
-you open the app, right-click it and choose **Open**. To build signed bundles,
-see [docs/signing.md](docs/signing.md).
+Bundles end up in `src-tauri/target/release/bundle/`. A bundle built this way
+is unsigned and does not auto-update. On macOS, the first time you open the
+app, right-click it and choose **Open**. Official releases are built locally
+with `bun run release` (signed, with auto-update): see
+[docs/signing.md](docs/signing.md).
 
 ## Adding accounts
 

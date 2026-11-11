@@ -45,9 +45,11 @@
   send: multipart/mixed): DONE.
 - Import/export (mbox, per-message EML): DONE. Automatic daily backup of
   the encrypted DB (Settings → Backup): DONE.
-- Packaging: `bundle.active` on; release workflow
-  (.github/workflows/release.yml) for macOS (aarch64/x86_64), Windows,
-  Linux; signing guide in docs/signing.md (secrets-gated).
+- Packaging and releases: DONE. Installers (macOS Apple Silicon `.dmg`,
+  Windows NSIS `-setup.exe`) are published on GitHub Releases with signed
+  auto-update (`latest.json`), built locally with `bun run release`
+  (scripts/release.ts; no CI because the Windows signing token is a USB
+  device). Intel Macs and Linux are not supported. See docs/signing.md.
 - e2e: protocol-level end-to-end test of the real engine binary
   (backend/e2e) over stdio JSON-lines: DONE.
 
