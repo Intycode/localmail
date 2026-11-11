@@ -254,4 +254,4 @@ through [GitHub Security Advisories](https://github.com/Intycode/mail/security/a
 
 ## License
 
-[MIT](LICENSE) © 2026 Dario Intycode
+[MIT](LICENSE) © 2026 Intycode Sagl
