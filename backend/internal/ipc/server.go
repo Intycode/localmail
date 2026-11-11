@@ -1471,6 +1471,16 @@ func opSend(_ context.Context, app *App, params json.RawMessage) (any, error) {
 		}
 		p.Message.SendAt = "" // in the past: send immediately
 	}
+	// a retry of the same compose attempt (error/timeout in the UI) joins
+	// the first send instead of delivering a second copy
+	if id := p.Message.ClientID; id != "" {
+		return sends.do(id, func() (any, error) { return sendNow(app, p) })
+	}
+	return sendNow(app, p)
+}
+
+// sendNow runs one immediate delivery (see opSend).
+func sendNow(app *App, p sendParams) (any, error) {
 	accounts, err := app.Accounts.List()
 	if err != nil {
 		return nil, err

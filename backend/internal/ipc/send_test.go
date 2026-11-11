@@ -9,14 +9,16 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 // fakeSMTP captures delivered messages (plaintext, AUTH PLAIN only).
 type fakeSMTP struct {
-	ln  net.Listener
-	msg string
+	ln         net.Listener
+	msg        string
+	deliveries atomic.Int32
 }
 
 func startFakeSMTP(t *testing.T) *fakeSMTP {
@@ -81,6 +83,7 @@ func (f *fakeSMTP) serve(t *testing.T, conn net.Conn) {
 				b.WriteString(dl + "\r\n")
 			}
 			f.msg += b.String()
+			f.deliveries.Add(1)
 			say("250 accepted")
 		case strings.HasPrefix(up, "QUIT"):
 			say("221 bye")
@@ -277,5 +280,58 @@ func TestSendSucceedsWhenLocalPersistenceFails(t *testing.T) {
 	}
 	if !strings.Contains(f.msg, "Subject: Consegnata") {
 		t.Errorf("message was not delivered over SMTP:\n%s", f.msg)
+	}
+}
+
+// A retry of the same compose attempt (same clientId) must not deliver the
+// mail twice, whether the first send is finished or not.
+func TestSendWithSameClientIDDeliversOnce(t *testing.T) {
+	f := startFakeSMTP(t)
+	smtpHost, smtpPort := f.hostPort()
+
+	env := startEnv(t)
+	host, portRaw, _ := net.SplitHostPort(env.addr)
+	port, _ := strconv.Atoi(portRaw)
+
+	ok, data, errMsg := env.call(t, "d0", "accounts.add", map[string]any{
+		"name": "Luca", "email": "luca@x.dev",
+		"imap":          map[string]any{"host": host, "port": port, "security": "plain", "username": "luca"},
+		"smtp":          map[string]any{"host": smtpHost, "port": smtpPort, "security": "plain", "username": "luca@x.dev"},
+		"secret":        secret,
+		"allowInsecure": true,
+	})
+	if !ok {
+		t.Fatalf("accounts.add: %s", errMsg)
+	}
+	var acc struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &acc); err != nil {
+		t.Fatal(err)
+	}
+
+	send := func(id, clientID string) {
+		ok, _, errMsg := env.call(t, id, "send", map[string]any{
+			"accountId": acc.ID,
+			"secret":    secret,
+			"message": map[string]any{
+				"to":       []map[string]any{{"email": "bo@x.dev"}},
+				"subject":  "Una volta sola",
+				"body":     "Ciao",
+				"clientId": clientID,
+			},
+		})
+		if !ok {
+			t.Fatalf("send %s: %s", id, errMsg)
+		}
+	}
+	send("d1", "attempt-1")
+	send("d2", "attempt-1") // the user clicks Send again after a timeout
+	if got := f.deliveries.Load(); got != 1 {
+		t.Fatalf("deliveries = %d, want 1", got)
+	}
+	send("d3", "attempt-2") // a new compose attempt is a new mail
+	if got := f.deliveries.Load(); got != 2 {
+		t.Fatalf("deliveries = %d, want 2", got)
 	}
 }

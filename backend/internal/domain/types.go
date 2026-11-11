@@ -178,6 +178,12 @@ type ComposeMessage struct {
 	// in the outbox queue and the worker delivers it at that time; the
 	// user can cancel via outbox.cancel while it is pending.
 	SendAt string `json:"sendAt,omitempty"`
+
+	// ClientID identifies one compose attempt. The UI reuses it when the
+	// user retries after an error or timeout, so the engine can recognise a
+	// send that already went out (or is still in flight) and not deliver the
+	// same mail twice.
+	ClientID string `json:"clientId,omitempty"`
 }
 
 // OutgoingFile is one file to attach to an outgoing message. Path is

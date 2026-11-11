@@ -99,6 +99,9 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
   const [files, setFiles] = React.useState<OutgoingFile[]>([])
   const [picking, setPicking] = React.useState(false)
   const draftIdRef = React.useRef<string | null>(null)
+  // one id per compose page: a successful send leaves the page, so any send
+  // from this page that follows an error or timeout is a retry of the same mail
+  const sendIdRef = React.useRef<string | null>(null)
   const [contextLoaded, setContextLoaded] = React.useState(true)
   const dirtyRef = React.useRef(false)
   dirtyRef.current = dirty
@@ -316,6 +319,7 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
       attachments: [],
       ...(files.length > 0 ? { files } : {}),
       ...(sendAt ? { sendAt } : {}),
+      clientId: (sendIdRef.current ??= crypto.randomUUID()),
       ...(sign || encrypt ? { sign, encrypt } : {}),
       ...(reply && reply.messageId
         ? {

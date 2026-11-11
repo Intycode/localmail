@@ -245,6 +245,9 @@ export interface ComposeMessage {
    *  the engine parks the message in the outbox until that moment, and the
    *  response carries the opId for cancellation */
   sendAt?: string
+  /** one compose attempt: reused on a retry after an error or timeout so the
+   *  engine does not deliver the same mail twice */
+  clientId?: string
   /** M9 OpenPGP: clearsign the text part (PGP/Inline) */
   sign?: boolean
   /** M9 OpenPGP: encrypt for every recipient (needs their public keys);
