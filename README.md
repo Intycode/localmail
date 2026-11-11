@@ -1,6 +1,6 @@
 <div align="center">
 
-# Mail
+# LocalMail
 
 **A minimal, fast, local-first email client that keeps your mail on your device.**
 
@@ -15,7 +15,7 @@ Optional AI features run only on a local model server that you run yourself.
 
 ---
 
-Mail is a desktop email client built with Tauri, Astro and a Go engine. Your
+LocalMail is a desktop email client built with Tauri, Astro and a Go engine. Your
 messages live in an **encrypted SQLite database on your machine**. The interface
 reads from that database right away, and a background sync keeps it up to date.
 Passwords and keys go in the operating system keychain and nowhere else.
@@ -83,7 +83,7 @@ Passwords and keys go in the operating system keychain and nowhere else.
 
 **Interface**
 
-- Keyboard-first: `j`/`k` to move, `r` to compose, `Esc` to go back
+- Keyboard-first: `j`/`k` (or arrow keys) to move, `a` to archive, `r` to compose
 - System, light and dark themes, with accent colors
 - English and Italian
 
@@ -103,6 +103,13 @@ bun install
 bun run engine:build   # compile the Go engine into src-tauri/binaries/
 bun run tauri:dev      # build the UI and open the app window
 ```
+
+`bun run start` runs both steps in one go.
+
+On macOS, the debug binary is signed with a local identity on every run
+(see [scripts/dev-run-signed.sh](scripts/dev-run-signed.sh)) so the keychain
+does not ask for your password after each rebuild. Create a "Mail Dev" code
+signing certificate in Keychain Access once; without it the app runs unsigned.
 
 ### Build a native bundle
 
@@ -126,7 +133,7 @@ see [docs/signing.md](docs/signing.md).
 | Gmail                  | Your own Google OAuth client in `oauth.json`, see [docs/oauth.md](docs/oauth.md)                       |
 | Microsoft / Outlook    | Your own Azure app registration (client ID) in `oauth.json`, see [docs/oauth.md](docs/oauth.md)        |
 
-Mail does not ship any OAuth credentials. For Gmail and Microsoft you register
+LocalMail does not ship any OAuth credentials. For Gmail and Microsoft you register
 your own OAuth client once, so no third party is involved.
 
 ## Architecture
@@ -190,6 +197,7 @@ bun run format               # prettier --write
 
 bun run backend:test         # go test ./...
 bun run backend:vet          # go vet ./...
+bun run backend:run          # run the engine on its own (stdio JSON-lines)
 
 bash scripts/check-all.sh    # every quality gate, frontend and backend
 bash scripts/security-check  # govulncheck + cargo audit (when installed)
@@ -222,7 +230,7 @@ Some documents are written in Italian.
 
 ## Privacy
 
-- Mail connects only to your mail servers, over **verified TLS**. Plaintext
+- LocalMail connects only to your mail servers, over **verified TLS**. Plaintext
   connections need an explicit opt-in.
 - The only other connections are:
   - the OAuth endpoints of Google or Microsoft, when you use those accounts;
@@ -232,7 +240,7 @@ Some documents are written in Italian.
   in the **OS keychain**.
 - Removing an account deletes its mail and its secrets.
 
-The full threat model, including what Mail does **not** protect against, is in
+The full threat model, including what LocalMail does **not** protect against, is in
 [docs/security.md](docs/security.md).
 
 ## Contributing

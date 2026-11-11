@@ -272,7 +272,7 @@ pub fn google_start(app: &tauri::AppHandle) -> Result<(String, String), String> 
 Content-Type: text/html; charset=utf-8
 Connection: close
 
-          <!doctype html><meta charset='utf-8'><title>Mail</title>          <body style='font-family:-apple-system,sans-serif;text-align:center;padding-top:3rem'>          <h2>&#10003; Autorizzazione completata</h2>          <p>Puoi chiudere questa finestra e tornare a Mail.</p></body>",
+          <!doctype html><meta charset='utf-8'><title>LocalMail</title>          <body style='font-family:-apple-system,sans-serif;text-align:center;padding-top:3rem'>          <h2>&#10003; Autorizzazione completata</h2>          <p>Puoi chiudere questa finestra e tornare a LocalMail.</p></body>",
     );
     let _ = stream.flush();
     drop(stream);

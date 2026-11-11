@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Mail — a super-minimal, fast, local-first, privacy-first multi-platform email client.",
+  "description": "LocalMail — a super-minimal, fast, local-first, privacy-first multi-platform email client.",
   "workspaces": [
     "packages/*",
     "apps/*"

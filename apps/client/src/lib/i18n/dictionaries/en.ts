@@ -4,12 +4,12 @@
  */
 export const en: Record<string, string> = {
   // --- document titles ---
-  "page.inbox": "Inbox — Mail",
-  "page.thread": "Thread — Mail",
-  "page.compose": "Compose — Mail",
-  "page.search": "Search — Mail",
-  "page.accounts": "Accounts — Mail",
-  "page.settings": "Settings — Mail",
+  "page.inbox": "Inbox — LocalMail",
+  "page.thread": "Thread — LocalMail",
+  "page.compose": "Compose — LocalMail",
+  "page.search": "Search — LocalMail",
+  "page.accounts": "Accounts — LocalMail",
+  "page.settings": "Settings — LocalMail",
 
   // --- common ---
   "common.cancel": "Cancel",
@@ -297,7 +297,7 @@ export const en: Record<string, string> = {
   "connect.smtpPasswordNote":
     "The password is the account's own, taken from the keychain when sending.",
   "connect.jmapNote": "JMAP needs no separate SMTP server.",
-  "connect.browserOnly": "Adding accounts is available in the Mail app, not in the browser.",
+  "connect.browserOnly": "Adding accounts is available in the LocalMail app, not in the browser.",
   "connect.added": "Account added: starting the first sync",
   "connect.addFailed": "Adding the account failed",
   "connect.errorTitle": "Connection failed",
@@ -317,7 +317,7 @@ export const en: Record<string, string> = {
 
   // --- onboarding ---
   "onboarding.language": "Language",
-  "onboarding.welcomeTitle": "Welcome to Mail",
+  "onboarding.welcomeTitle": "Welcome to LocalMail",
   "onboarding.welcomeDesc":
     "Mail is downloaded to this device; passwords stay in the system keychain.",
   "onboarding.start": "Get started",
@@ -346,7 +346,7 @@ export const en: Record<string, string> = {
 
   // --- settings ---
   "settings.title": "Settings",
-  "settings.version": "Mail v{version}",
+  "settings.version": "LocalMail v{version}",
   "settings.sections": "Settings sections",
   "settings.general": "General",
   "settings.compact": "Compact list",

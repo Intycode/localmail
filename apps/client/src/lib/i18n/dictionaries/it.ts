@@ -5,12 +5,12 @@
  */
 export const it: Record<string, string> = {
   // --- pagine (titoli del documento) ---
-  "page.inbox": "Inbox — Mail",
-  "page.thread": "Conversazione — Mail",
-  "page.compose": "Componi — Mail",
-  "page.search": "Cerca — Mail",
-  "page.accounts": "Account — Mail",
-  "page.settings": "Impostazioni — Mail",
+  "page.inbox": "Inbox — LocalMail",
+  "page.thread": "Conversazione — LocalMail",
+  "page.compose": "Componi — LocalMail",
+  "page.search": "Cerca — LocalMail",
+  "page.accounts": "Account — LocalMail",
+  "page.settings": "Impostazioni — LocalMail",
 
   // --- common ---
   "common.cancel": "Annulla",
@@ -299,7 +299,7 @@ export const it: Record<string, string> = {
   "connect.smtpPasswordNote":
     "La password è la stessa dell'account, presa dal keychain al momento dell'invio.",
   "connect.jmapNote": "JMAP non richiede un server SMTP separato.",
-  "connect.browserOnly": "Aggiungere account è disponibile nell'app Mail, non nel browser.",
+  "connect.browserOnly": "Aggiungere account è disponibile nell'app LocalMail, non nel browser.",
   "connect.added": "Account aggiunto: avvio della prima sincronizzazione",
   "connect.addFailed": "Aggiunta account non riuscita",
   "connect.errorTitle": "Connessione non riuscita",
@@ -319,7 +319,7 @@ export const it: Record<string, string> = {
 
   // --- onboarding ---
   "onboarding.language": "Lingua",
-  "onboarding.welcomeTitle": "Benvenuto in Mail",
+  "onboarding.welcomeTitle": "Benvenuto in LocalMail",
   "onboarding.welcomeDesc":
     "La posta viene scaricata su questo dispositivo; le password restano nel keychain di sistema.",
   "onboarding.start": "Inizia",
@@ -348,7 +348,7 @@ export const it: Record<string, string> = {
 
   // --- impostazioni ---
   "settings.title": "Impostazioni",
-  "settings.version": "Mail v{version}",
+  "settings.version": "LocalMail v{version}",
   "settings.sections": "Sezioni delle impostazioni",
   "settings.general": "Generale",
   "settings.compact": "Lista compatta",

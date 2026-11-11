@@ -216,7 +216,7 @@ function AccountSwitcher({ accounts, active }: { accounts: Account[]; active?: A
         <a href="/accounts">
           <AppLogo className="size-8" />
           <div className="grid min-w-0 flex-1 leading-tight">
-            <span className="truncate font-semibold">Mail</span>
+            <span className="truncate font-semibold">LocalMail</span>
             <span className="truncate text-xs text-muted-foreground">{t("nav.noAccountYet")}</span>
           </div>
         </a>
@@ -233,7 +233,7 @@ function AccountSwitcher({ accounts, active }: { accounts: Account[]; active?: A
         >
           {active && <AccountAvatar accountId={active.id} name={active.name} size="md" />}
           <div className="grid min-w-0 flex-1 leading-tight">
-            <span className="truncate font-semibold">{active?.name ?? "Mail"}</span>
+            <span className="truncate font-semibold">{active?.name ?? "LocalMail"}</span>
             <span className="truncate text-xs text-muted-foreground">{active?.email}</span>
           </div>
           <ChevronsUpDown className="ml-auto size-4 opacity-50" />

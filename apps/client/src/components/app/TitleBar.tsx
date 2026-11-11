@@ -118,7 +118,7 @@ export function TitleBar() {
         className="flex items-center gap-1.5 px-2 [&_*]:pointer-events-none"
       >
         <AppLogo className="size-3.5" />
-        <span className="text-xs font-medium text-foreground/80">Mail</span>
+        <span className="text-xs font-medium text-foreground/80">LocalMail</span>
       </div>
 
       {chrome && chrome !== "macos" && (

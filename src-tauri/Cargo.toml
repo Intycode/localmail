@@ -1,7 +1,7 @@
 [package]
 name = "mail"
 version = "0.1.0"
-description = "Mail — minimal local-first email client (thin Tauri native layer)"
+description = "LocalMail — minimal local-first email client (thin Tauri native layer)"
 edition = "2021"
 build = "build.rs"
 
