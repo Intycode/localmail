@@ -96,7 +96,11 @@ export function AppSidebar({
   const activeAccount = accounts.find((a) => a.isActive) ?? accounts[0]
   // Unified view entry: meaningful only with more than one account. The badge
   // sums every account's inbox unread count.
-  const syncing = React.useSyncExternalStore(syncStore.subscribe, syncStore.get, syncStore.get).running
+  const syncing = React.useSyncExternalStore(
+    syncStore.subscribe,
+    syncStore.get,
+    syncStore.get,
+  ).running
   const showUnified = accounts.length >= 2
   const unifiedUnread = accounts.reduce(
     (sum, a) =>

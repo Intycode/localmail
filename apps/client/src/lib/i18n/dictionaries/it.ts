@@ -378,7 +378,8 @@ export const it: Record<string, string> = {
   "settings.undoDisabled": "Disattivata",
   "settings.seconds": "{n} secondi",
   "settings.syncInterval": "Sincronizzazione",
-  "settings.syncIntervalDesc": "Ogni quanto controllare la nuova posta. Sincronizza sempre all'avvio.",
+  "settings.syncIntervalDesc":
+    "Ogni quanto controllare la nuova posta. Sincronizza sempre all'avvio.",
   "settings.syncStartup": "Solo all'avvio",
   "settings.minutes": "Ogni {n} minuti",
   "settings.appearance": "Aspetto",
