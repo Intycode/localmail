@@ -3,6 +3,9 @@
 # in src-tauri/binaries con i suffissi attesi da bundle.externalBin.
 set -euo pipefail
 
+# shortcut: percorso Go di default su Windows, per terminali con PATH vecchio; togliere se Go è sempre nel PATH
+command -v go >/dev/null || export PATH="$PATH:/c/Program Files/Go/bin"
+
 cd backend
 
 # Motore puro Go (sqlite wasm): niente CGO, cross-compila senza toolchain C.
