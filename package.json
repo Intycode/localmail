@@ -1,6 +1,6 @@
 {
   "name": "mail",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "private": true,
   "type": "module",
   "description": "LocalMail — a super-minimal, fast, local-first, privacy-first multi-platform email client.",
