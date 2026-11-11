@@ -17,6 +17,10 @@ export const it: Record<string, string> = {
   "common.skip": "Salta",
   "common.done": "Fatto",
   "common.retry": "Riprova",
+  "error.title": "Qualcosa è andato storto",
+  "error.desc":
+    "La schermata ha avuto un errore imprevisto. Le tue email sono al sicuro: ricarica per continuare.",
+  "error.reload": "Ricarica",
   "common.remove": "Rimuovi",
   "common.delete": "Elimina",
   "common.back": "Indietro",

@@ -14,6 +14,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { Account, Folder } from "@/types"
 import { AppSidebar } from "./AppSidebar"
+import { ErrorBoundary } from "./ErrorBoundary"
 import { OfflineBanner } from "./OfflineBanner"
 import { TitleBar } from "./TitleBar"
 
@@ -110,7 +111,7 @@ export function AppShell({
                   contentMode === "page" && "overflow-y-auto",
                 )}
               >
-                {children}
+                <ErrorBoundary>{children}</ErrorBoundary>
               </main>
             </SidebarInset>
             <Toaster position="bottom-right" richColors closeButton />
