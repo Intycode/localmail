@@ -49,6 +49,7 @@ repository firmati (apt/rpm + GPG) restano fuori scope.
 - Auto-update: all'avvio l'app legge
   `releases/latest/download/latest.json`, verifica la firma minisign
   (chiave pubblica in `tauri.conf.json → plugins.updater.pubkey`) e propone
-  l'installazione. Solo le release pubblicate (non draft) sono "latest".
+  l'installazione. La release resta draft finché non ci sono tutte le piattaforme, poi
+  `release build` la pubblica come "latest".
 - Verifica consigliata agli utenti: confrontare lo SHA-256 dell'artefatto
   con quello pubblicato nella release.

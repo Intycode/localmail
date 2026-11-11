@@ -38,6 +38,7 @@
 			"timestampUrl": "http://timestamp.sectigo.com",
 			"tsp": true
 		},
+		"macOS": { "signingIdentity": "-" },
 		"category": "Productivity",
 		"shortDescription": "Client email locale-first e privacy-first",
 		"longDescription": "Mail — client email minimale e veloce. Local-first, privacy-first: niente cloud, niente account, niente tracking. La posta resta sul tuo dispositivo (SQLite cifrato), le password nel keychain di sistema.",

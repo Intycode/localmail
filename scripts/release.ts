@@ -3,19 +3,21 @@
  * release — version bump + signed builds + GitHub Release with updater manifest.
  *
  *   bun run release bump 0.2.0   bump versions, commit, tag v0.2.0, push
- *   bun run release build        build THIS platform (macOS universal / Windows x64),
- *                                upload to the draft release, merge latest.json
- *   bun run release publish      publish the draft: installed apps see the update
+ *   bun run release build        build THIS platform (macOS Apple Silicon / Windows x64),
+ *                                upload to the draft release, merge latest.json;
+ *                                once every PLATFORMS entry is in, publishes it as latest
  *
  * See CLAUDE.md → "Rilasci" for the full procedure and prerequisites.
  */
 import { $ } from "bun"
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..")
 const REPO = "Intycode/localmail"
+// a release stays draft until latest.json covers all of these
+const PLATFORMS = ["darwin-aarch64", "windows-x86_64"]
 $.cwd(ROOT)
 
 const readJson = (p: string) => JSON.parse(readFileSync(join(ROOT, p), "utf8"))
@@ -24,6 +26,12 @@ const die = (msg: string): never => {
   console.error(`release: ${msg}`)
   process.exit(1)
 }
+const t0 = Date.now()
+const step = (msg: string) => {
+  const s = Math.round((Date.now() - t0) / 1000)
+  console.log(`\n\x1b[1;36m▶ ${msg}\x1b[0m  \x1b[2m(${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s)\x1b[0m`)
+}
+const mb = (f: string) => `${(statSync(f).size / 1e6).toFixed(1)} MB`
 
 async function bump(next: string | undefined): Promise<void> {
   if (!next || !/^\d+\.\d+\.\d+$/.test(next)) die("usage: release bump <x.y.z>")
@@ -65,24 +73,25 @@ type Built = { files: string[]; updater: string; platforms: string[] }
 
 async function buildMac(env: Record<string, string>): Promise<Built> {
   if (!env.APPLE_SIGNING_IDENTITY)
-    console.warn("release: APPLE_SIGNING_IDENTITY not set → app NOT signed/notarized (Gatekeeper will block it)")
-  await $`rustup target add aarch64-apple-darwin x86_64-apple-darwin`.quiet()
-  // universal sidecar: same flags as scripts/engine-build.sh, one slice per arch, then lipo
-  const goEnv = { ...env, CGO_ENABLED: "0", GOPATH: join(ROOT, "backend/.go-home"), GOCACHE: join(ROOT, "backend/.go-home/build") }
-  for (const arch of ["arm64", "amd64"])
-    await $`go build -trimpath -o ../src-tauri/binaries/mail-engine-${arch} ./cmd/mail`.cwd(join(ROOT, "backend")).env({ ...goEnv, GOOS: "darwin", GOARCH: arch })
-  const bin = join(ROOT, "src-tauri/binaries")
-  await $`lipo -create -output ${bin}/mail-engine-universal-apple-darwin ${bin}/mail-engine-arm64 ${bin}/mail-engine-amd64`
+    console.warn("release: APPLE_SIGNING_IDENTITY not set → ad-hoc signature only, not notarized (users must \"Open Anyway\")")
+  // Apple Silicon only (shortcut: no Intel Macs; for them build --target universal-apple-darwin with a lipo'd sidecar)
+  if (process.arch !== "arm64") die("macOS release must be built on Apple Silicon")
+  step("Motore Go (aarch64)")
+  await $`bun run engine:build`.env(env)
   // frontend is built by tauri.conf.json → beforeBuildCommand
-  await $`bunx tauri build --config src-tauri/tauri.conf.json --target universal-apple-darwin --bundles app,dmg`.env(env)
-  const b = join(ROOT, "src-tauri/target/universal-apple-darwin/release/bundle")
+  step("Frontend + app Tauri + .app/.dmg + firma updater (diversi minuti)")
+  await $`bunx tauri build --config src-tauri/tauri.conf.json --bundles app,dmg`.env(env)
+  const b = join(ROOT, "src-tauri/target/release/bundle")
   const updater = join(b, "macos/LocalMail.app.tar.gz")
-  return { files: [updater, `${updater}.sig`, join(b, `dmg/LocalMail_${version()}_universal.dmg`)], updater, platforms: ["darwin-aarch64", "darwin-x86_64"] }
+  return { files: [updater, `${updater}.sig`, join(b, `dmg/LocalMail_${version()}_aarch64.dmg`)], updater, platforms: ["darwin-aarch64"] }
 }
 
 async function buildWindows(env: Record<string, string>): Promise<Built> {
+  step("Motore Go (x64)")
   await $`bun run engine:build`.env(env)
+  step("Frontend + app Tauri + installer NSIS + firma updater (diversi minuti)")
   await $`bunx tauri build --config src-tauri/tauri.conf.json --bundles nsis`.env(env)
+  step("Firma Authenticode (token USB)")
   await $`bash scripts/sign-windows.sh`.env(env)
   const updater = join(ROOT, `src-tauri/target/release/bundle/nsis/LocalMail_${version()}_x64-setup.exe`)
   return { files: [updater, `${updater}.sig`], updater, platforms: ["windows-x86_64"] }
@@ -92,18 +101,25 @@ async function build(): Promise<void> {
   const v = version()
   if (!(await $`git tag --points-at HEAD`.text()).split("\n").includes(`v${v}`))
     die(`HEAD is not tagged v${v}: run "release bump" first (or git pull --tags)`)
-  const env = signingEnv()
+  // output is piped through Bun, not a TTY: force cargo's colors and progress bar
+  const env = { CARGO_TERM_COLOR: "always", CARGO_TERM_PROGRESS_WHEN: "always", CARGO_TERM_PROGRESS_WIDTH: "80", ...signingEnv() }
+  step(`Build v${v} per ${process.platform}/${process.arch}`)
   const built =
     process.platform === "darwin" ? await buildMac(env)
     : process.platform === "win32" ? await buildWindows(env)
     : die(`unsupported platform ${process.platform}`)
   for (const f of built.files) if (!existsSync(f)) die(`missing artifact ${f}`)
+  step("Artefatti")
+  for (const f of built.files) console.log(`  ${f.slice(ROOT.length + 1)}  ${mb(f)}`)
 
   const tag = `v${v}`
+  step(`Release ${tag} su GitHub`)
   if ((await $`gh release view ${tag} -R ${REPO}`.nothrow().quiet()).exitCode !== 0)
-    await $`gh release create ${tag} -R ${REPO} --draft --verify-tag --title ${`LocalMail ${tag}`} --generate-notes`
+    await $`gh release create ${tag} -R ${REPO} --draft --verify-tag --title ${tag} --generate-notes`
+  step(`Upload ${built.files.length} file (${built.files.map(mb).join(" + ")})`)
   await $`gh release upload ${tag} -R ${REPO} --clobber ${built.files}`
 
+  step("Aggiorno latest.json")
   // merge this platform into latest.json (the other OS may have uploaded already)
   const dl = await $`gh release download ${tag} -R ${REPO} -p latest.json -O -`.nothrow().quiet()
   const manifest = dl.exitCode === 0 ? JSON.parse(dl.stdout.toString()) : { platforms: {} }
@@ -119,22 +135,20 @@ async function build(): Promise<void> {
   const out = join(ROOT, "src-tauri/target/latest.json")
   writeFileSync(out, JSON.stringify(manifest, null, 2))
   await $`gh release upload ${tag} -R ${REPO} --clobber ${out}`
-  console.log(`${tag}: uploaded ${built.platforms.join(", ")} → latest.json has ${Object.keys(manifest.platforms).join(", ")}`)
-}
 
-async function publish(): Promise<void> {
-  const tag = `v${version()}`
-  const json = await $`gh release download ${tag} -R ${REPO} -p latest.json -O -`.nothrow().quiet()
-  if (json.exitCode !== 0) die(`${tag} has no latest.json: run "release build" first`)
-  const have = Object.keys(JSON.parse(json.stdout.toString()).platforms)
-  const missing = ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"].filter((p) => !have.includes(p))
-  if (missing.length) die(`latest.json is missing ${missing.join(", ")}: build on the other OS first`)
+  const missing = PLATFORMS.filter((p) => !manifest.platforms[p])
+  if (missing.length) {
+    step("Fatto: release in draft")
+    console.log(`${tag}: manca ${missing.join(", ")} → builda sull'altro OS, poi verrà pubblicata`)
+    return
+  }
+  step(`Pubblico ${tag}`)
   await $`gh release edit ${tag} -R ${REPO} --draft=false --latest`
-  console.log(`${tag} published: installed apps will offer the update on next start`)
+  step("Fatto")
+  console.log(`${tag} pubblicata: le app installate propongono l'aggiornamento al prossimo avvio`)
 }
 
 const [cmd, arg] = process.argv.slice(2)
 if (cmd === "bump") await bump(arg)
 else if (cmd === "build") await build()
-else if (cmd === "publish") await publish()
-else die("usage: release bump <x.y.z> | build | publish")
+else die("usage: release bump <x.y.z> | build")

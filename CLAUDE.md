@@ -16,10 +16,12 @@ Le build sono **locali**: la firma Windows usa un token USB, quindi niente CI.
   verifica la firma con la `pubkey` in `src-tauri/tauri.conf.json → plugins.updater`
   e, se l'utente accetta, installa e riavvia. Una volta per sessione, silenzioso se offline.
 - `latest.json` è un asset della GitHub Release: contiene versione, URL e firma
-  per `darwin-aarch64`, `darwin-x86_64` (stesso `.app.tar.gz` universal) e
-  `windows-x86_64` (installer NSIS `-setup.exe`).
-- "latest" = ultima release **pubblicata**, non draft e non prerelease. Finché la
-  release è draft nessun utente la vede.
+  per `darwin-aarch64` (solo Apple Silicon, M1+: i Mac Intel non sono
+  supportati) e `windows-x86_64` (installer NSIS `-setup.exe`).
+- `release build` crea la release in **draft** (titolo = tag, es. `v0.2.0`) e la
+  pubblica come "latest" da sola quando `latest.json` contiene tutte le
+  piattaforme di `PLATFORMS` in `scripts/release.ts`. Finché è draft nessun utente
+  la vede.
 - Le installazioni fatte prima della prima versione con updater non si aggiornano
   da sole: vanno reinstallate a mano una volta.
 
@@ -54,8 +56,9 @@ Le build sono **locali**: la firma Windows usa un token USB, quindi niente CI.
 3. **macOS – firma e notarizzazione** (Apple Developer Program, vedi
    [docs/signing.md](docs/signing.md)): `APPLE_SIGNING_IDENTITY`
    (`Developer ID Application: …`), `APPLE_ID`, `APPLE_PASSWORD`
-   (app-specific), `APPLE_TEAM_ID`. Senza, lo script avvisa e produce un'app non
-   firmata che Gatekeeper blocca al primo avvio.
+   (app-specific), `APPLE_TEAM_ID` (la variabile sovrascrive il `signingIdentity: "-"`
+   di `tauri.conf.json`). Senza, lo script avvisa e l'app ha solo una firma ad-hoc:
+   al primo avvio va sbloccata da Impostazioni → Privacy e sicurezza → "Apri comunque".
 4. **Windows**: token USB inserito (thumbprint in `tauri.conf.json`), Windows SDK
    (signtool), Git Bash, Go, Rust, Bun.
 5. `gh` autenticato con permessi di scrittura su `Intycode/localmail`, su
@@ -69,7 +72,7 @@ Dal branch `main`, working tree pulito, check verdi (`bash scripts/check-all.sh`
    ```sh
    bun run release bump 0.2.0
    ```
-2. **Mac** — build universal (arm64+x64), crea la release **draft** con note
+2. **Mac** (Apple Silicon) — build arm64, crea la release **draft** con note
    generate, carica `.dmg`, `.app.tar.gz`, `.sig` e `latest.json`:
    ```sh
    bun run release build
@@ -80,17 +83,13 @@ Dal branch `main`, working tree pulito, check verdi (`bash scripts/check-all.sh`
    bun run release build
    ```
    Carica `-setup.exe` + `.sig` e unisce `windows-x86_64` in `latest.json`.
-4. Controlla la draft su GitHub (note di rilascio, asset), poi:
-   ```sh
-   bun run release publish
-   ```
-   Rifiuta di pubblicare se `latest.json` non ha tutte e tre le piattaforme.
-
-Da quel momento le app installate propongono l'aggiornamento al prossimo avvio.
+   Completate le piattaforme, pubblica la release: da quel momento le app
+   installate propongono l'aggiornamento al prossimo avvio. L'ordine Mac/Windows
+   è indifferente.
 
 ### Regole per Claude
 
-- Non eseguire `release bump`, `build` o `publish` senza richiesta esplicita
+- Non eseguire `release bump` o `build` senza richiesta esplicita
   dell'utente: fanno push e pubblicano verso gli utenti.
 - Non leggere, stampare o committare la chiave privata o le password.
 - Se una build fallisce a metà, rilancia `release build`: è idempotente
@@ -99,6 +98,6 @@ Da quel momento le app installate propongono l'aggiornamento al prossimo avvio.
   Non cancellare la release "latest" senza averne pubblicata un'altra, o
   l'endpoint dell'updater restituisce 404.
 - Nomi degli artefatti attesi (se Tauri li cambia, aggiorna lo script):
-  `target/universal-apple-darwin/release/bundle/macos/LocalMail.app.tar.gz`,
-  `…/dmg/LocalMail_<v>_universal.dmg`,
+  `target/release/bundle/macos/LocalMail.app.tar.gz`,
+  `…/dmg/LocalMail_<v>_aarch64.dmg`,
   `target/release/bundle/nsis/LocalMail_<v>_x64-setup.exe`.
