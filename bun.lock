@@ -15,7 +15,7 @@
     },
     "apps/client": {
       "name": "@mail/client",
-      "version": "0.1.0",
+      "version": "0.2.1",
       "dependencies": {
         "@astrojs/react": "^6.0.4",
         "@fontsource-variable/geist": "^5.3.0",
