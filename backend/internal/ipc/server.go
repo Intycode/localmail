@@ -1356,8 +1356,15 @@ func opSyncStart(ctx context.Context, app *App, params json.RawMessage) (any, er
 		}
 		newWatchPv := func() (provider.MailProvider, error) {
 			// one extra IMAP session per watched folder (IDLE occupies the
-			// session's selected mailbox)
-			return providerForAccount(app, &acc, sec.Expose())
+			// session's selected mailbox). Also used to redial a dropped
+			// session: read the CURRENT secret, not the one captured at
+			// sync.start (an OAuth access token expires after ~1 h and is
+			// refreshed in the vault by secrets.restore).
+			cur, ok := app.Secrets.Get(accountID)
+			if !ok || cur.Empty() {
+				return nil, fmt.Errorf("credenziale non disponibile")
+			}
+			return providerForAccount(app, &acc, cur.Expose())
 		}
 		app.Watchers.Start(accountID, watchPv, watchMailboxes(app, accountID), newWatchPv)
 	}(p.AccountID, *target, secret)

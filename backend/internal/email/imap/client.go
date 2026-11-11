@@ -354,9 +354,23 @@ func (s *clientSession) Idle(mailbox string, notify chan<- struct{}) (func(), er
 		s.mu.Unlock()
 		return nil, fmt.Errorf("idle su %q: %v", mailbox, err)
 	}
+	// a dropped connection (standby, network change, server restart) wakes
+	// the watcher like new mail would: its next command fails and it redials
+	idleDone := make(chan struct{})
+	go func() {
+		select {
+		case <-s.c.Closed():
+			select {
+			case notify <- struct{}{}:
+			default:
+			}
+		case <-idleDone:
+		}
+	}()
 	var once sync.Once
 	stop := func() {
 		once.Do(func() {
+			close(idleDone)
 			_ = cmd.Close() // sends DONE
 			_ = cmd.Wait()
 			s.dc.setIdle(0)

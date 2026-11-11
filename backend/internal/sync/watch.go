@@ -10,6 +10,7 @@ package sync
 
 import (
 	"errors"
+	"log"
 	"sync"
 	"time"
 
@@ -24,6 +25,13 @@ const (
 	// then the SPECIAL-USE folders. Extra custom folders rely on the next
 	// full sync (or the poll fallback).
 	maxWatchedFolders = 8
+)
+
+// Reconnect backoff: first retry after reconnectBase, doubling up to
+// reconnectMax. Vars (not consts) so tests can shrink them.
+var (
+	reconnectBase = 5 * time.Second
+	reconnectMax  = 5 * time.Minute
 )
 
 // Supervisor owns one Watcher per account.
@@ -116,10 +124,10 @@ func (w *Watcher) run(
 	// incremental syncs from any folder go through one mutex: the engine
 	// pipeline writes to SQLite (single writer) and coalesces events
 	var syncMu sync.Mutex
-	syncOnce := func(p provider.MailProvider) {
+	syncOnce := func(p provider.MailProvider) error {
 		syncMu.Lock()
 		defer syncMu.Unlock()
-		e.syncPushQuiet(accountID, p)
+		return e.SyncPush(accountID, p)
 	}
 
 	var wg sync.WaitGroup
@@ -131,47 +139,80 @@ func (w *Watcher) run(
 				continue // degrade: watch fewer folders, never crash
 			}
 			p = np
-			defer func(pv provider.MailProvider) {
-				if c, ok := pv.(provider.Closer); ok {
-					c.Close()
-				}
-			}(p)
 		}
 		wg.Add(1)
 		go func(pv provider.MailProvider, mb string, isPrimary bool) {
 			defer wg.Done()
-			w.watchOne(e, accountID, pv, mb, isPrimary, syncOnce)
+			w.watchOne(e, accountID, pv, mb, isPrimary, syncOnce, newProvider)
 		}(p, mailbox, i == 0)
 	}
 	wg.Wait()
 }
 
-// watchOne runs the IDLE loop for one mailbox. Real failures on the primary
-// mailbox surface as sync.error (as before); failures on secondary folders
-// just end that folder's loop — the primary keeps pushing, and the next
-// full sync (app start / manual) heals the rest.
+// watchOne keeps one mailbox watched for the lifetime of the watcher. When
+// the session breaks (network change, standby, server restart) it closes the
+// provider, waits with a growing delay, redials through newProvider and runs
+// a catch-up sync before idling again, so mail that arrived while offline
+// shows up. watchOne owns every provider it holds and closes it on exit.
 func (w *Watcher) watchOne(
 	e *Engine,
 	accountID string,
 	p provider.MailProvider,
 	mailbox string,
 	isPrimary bool,
-	syncOnce func(provider.MailProvider),
+	syncOnce func(provider.MailProvider) error,
+	newProvider func() (provider.MailProvider, error),
 ) {
-	notify := make(chan struct{}, 8)
-	idleStop, idleErr := p.Idle(mailbox, notify)
-	idleOK := idleErr == nil
-	if !idleOK {
-		if isPrimary && !errors.Is(idleErr, imap.ErrIdleUnsupported) {
-			// a real failure (network/auth): surface it like a sync error
-			e.Bus.SyncError(accountID, "watch: "+idleErr.Error())
+	cur := p
+	defer func() { closeProvider(cur) }()
+	for attempt, catchUp := 0, false; ; {
+		start := time.Now()
+		err := w.runSession(cur, mailbox, catchUp, syncOnce)
+		if err == nil {
+			return // watcher stopped
+		}
+		if time.Since(start) > time.Minute {
+			attempt = 0 // the session was healthy for a while: restart the backoff
+		}
+		log.Printf("watch %s/%s: %v (riconnessione)", accountID, mailbox, err)
+		if attempt == 0 && isPrimary {
+			// surface the first failure like a sync error; retries stay quiet
+			e.Bus.SyncError(accountID, "watch: "+err.Error())
+		}
+		closeProvider(cur)
+		if !w.sleep(backoff(attempt)) {
 			return
 		}
-		if !isPrimary && !errors.Is(idleErr, imap.ErrIdleUnsupported) {
-			return // secondary folder: degrade silently
+		attempt++
+		if np, nerr := newProvider(); nerr == nil {
+			cur = np
+		} else {
+			log.Printf("watch %s/%s: nuova connessione: %v", accountID, mailbox, nerr)
+		}
+		catchUp = true
+	}
+}
+
+// runSession idles (or polls, when the server has no IDLE) on one mailbox.
+// It returns nil when the watcher is stopped and an error when the session
+// broke and must be redialed. catchUp runs one sync first (after a redial).
+func (w *Watcher) runSession(
+	p provider.MailProvider,
+	mailbox string,
+	catchUp bool,
+	syncOnce func(provider.MailProvider) error,
+) error {
+	if catchUp {
+		if err := syncOnce(p); err != nil {
+			return err
 		}
 	}
-
+	notify := make(chan struct{}, 8)
+	idleStop, err := p.Idle(mailbox, notify)
+	idleOK := err == nil
+	if err != nil && !errors.Is(err, imap.ErrIdleUnsupported) {
+		return err
+	}
 	var pollC <-chan time.Time
 	if !idleOK {
 		t := time.NewTicker(pollInterval)
@@ -185,35 +226,64 @@ func (w *Watcher) watchOne(
 			if idleOK {
 				idleStop()
 			}
-			return
+			return nil
 
 		case <-notify:
-			// end IDLE to run commands, then incremental sync + re-idle
+			// new mail, or the session closed: end IDLE to run commands,
+			// then incremental sync + re-idle
 			if idleOK {
 				idleStop()
 			}
 			if w.stopped() {
-				return
+				return nil
 			}
-			syncOnce(p)
+			if err := syncOnce(p); err != nil {
+				return err
+			}
 			if w.stopped() {
-				return
+				return nil
 			}
 			if idleOK {
-				var err error
-				idleStop, err = p.Idle(mailbox, notify)
-				if err != nil {
-					// session dropped (network change): fall back to polling
-					idleOK = false
-					t := time.NewTicker(pollInterval)
-					defer t.Stop()
-					pollC = t.C
+				if idleStop, err = p.Idle(mailbox, notify); err != nil {
+					return err
 				}
 			}
 
 		case <-pollC:
-			syncOnce(p)
+			if err := syncOnce(p); err != nil {
+				return err
+			}
 		}
+	}
+}
+
+// backoff is the wait before reconnect attempt n (0-based): base, 2x, 4x… capped.
+func backoff(n int) time.Duration {
+	d := reconnectBase
+	for i := 0; i < n && d < reconnectMax; i++ {
+		d *= 2
+	}
+	if d > reconnectMax {
+		d = reconnectMax
+	}
+	return d
+}
+
+// sleep waits d or until the watcher stops; false means stopped.
+func (w *Watcher) sleep(d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-w.stopCh:
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+func closeProvider(p provider.MailProvider) {
+	if c, ok := p.(provider.Closer); ok {
+		c.Close()
 	}
 }
 

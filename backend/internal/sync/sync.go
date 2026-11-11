@@ -81,14 +81,6 @@ func (e *Engine) SyncPush(accountID string, p provider.MailProvider) error {
 	return e.syncAll(accountID, p, true)
 }
 
-// syncPushQuiet runs a watcher pass: message.created events flow, but a
-// failure is only logged (the watcher stays alive for the next notify/poll).
-func (e *Engine) syncPushQuiet(accountID string, p provider.MailProvider) {
-	if err := e.syncAll(accountID, p, true); err != nil {
-		log.Printf("watch sync %s: %v", accountID, err)
-	}
-}
-
 // SyncAccount performs a sync of every syncable folder of the account using
 // the engine's own provider (mock/smoke path).
 func (e *Engine) SyncAccount(accountID string) error {
