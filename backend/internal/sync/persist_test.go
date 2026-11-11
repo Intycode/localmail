@@ -327,3 +327,45 @@ func TestSyncAppliesServerReadState(t *testing.T) {
 		t.Fatalf("thread unread=%d folder badge=%d", threadUnread, folderUnread)
 	}
 }
+
+// streamingProvider hands messages to OnBatch one per batch, like the IMAP
+// provider does while it fetches, and returns no Messages itself.
+type streamingProvider struct{ fakeProvider }
+
+func (s *streamingProvider) SyncFolder(ref provider.FolderRef) (provider.FolderSync, error) {
+	for _, raw := range []provider.RawMessage{
+		{UID: 1, Flags: []string{"\\Seen"}, Data: []byte(rawMsg1)},
+		{UID: 2, Data: []byte(rawMsg2)},
+	} {
+		if err := ref.OnBatch(42, []provider.RawMessage{raw}); err != nil {
+			return provider.FolderSync{}, err
+		}
+	}
+	return provider.FolderSync{UIDValidity: 42, AllUIDs: []uint32{1, 2}}, nil
+}
+
+func TestSyncStoresStreamedBatches(t *testing.T) {
+	engine, accs := setupEngine(t)
+
+	if err := engine.SyncAccountWith("a1", &streamingProvider{}); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	for _, id := range []string{"m:a1:f-inbox:1", "m:a1:f-inbox:2"} {
+		if _, err := engine.messages.Get(id); err != nil {
+			t.Errorf("message %s not stored: %v", id, err)
+		}
+	}
+	// the reply lands in a LATER batch than its parent and still threads to it
+	folders, _ := engine.accounts.Folders("a1")
+	for _, f := range folders {
+		if f.ID == "f-inbox" && f.Total != 1 {
+			t.Errorf("inbox threads = %d, want 1 (reply grouped across batches)", f.Total)
+		}
+	}
+	refs, _ := accs.SyncRefs("a1")
+	for _, r := range refs {
+		if r.FolderID == "f-inbox" && r.LastUID != 2 {
+			t.Errorf("lastUID = %d, want 2", r.LastUID)
+		}
+	}
+}

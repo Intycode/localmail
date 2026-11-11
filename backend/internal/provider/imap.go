@@ -90,9 +90,24 @@ func (p *ImapProvider) SyncFolder(ref FolderRef) (FolderSync, error) {
 		}
 	}
 
-	fetched, err := s.Fetch(targets)
-	if err != nil {
-		return FolderSync{}, err
+	var msgs []RawMessage
+	for start := 0; start < len(targets); start += imap.FetchBatch {
+		end := min(start+imap.FetchBatch, len(targets))
+		fetched, err := s.Fetch(targets[start:end])
+		if err != nil {
+			return FolderSync{}, err
+		}
+		batch := make([]RawMessage, 0, len(fetched))
+		for _, m := range fetched {
+			batch = append(batch, RawMessage{UID: m.UID, Flags: m.Flags, Data: m.Data})
+		}
+		if ref.OnBatch != nil {
+			if err := ref.OnBatch(state.UIDValidity, batch); err != nil {
+				return FolderSync{}, err
+			}
+			continue
+		}
+		msgs = append(msgs, batch...)
 	}
 	var flags map[uint32][]string
 	if !initial {
@@ -110,10 +125,6 @@ func (p *ImapProvider) SyncFolder(ref FolderRef) (FolderSync, error) {
 		if flags, err = s.Flags(known); err != nil {
 			return FolderSync{}, err
 		}
-	}
-	msgs := make([]RawMessage, 0, len(fetched))
-	for _, m := range fetched {
-		msgs = append(msgs, RawMessage{UID: m.UID, Flags: m.Flags, Data: m.Data})
 	}
 
 	return FolderSync{

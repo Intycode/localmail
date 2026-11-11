@@ -131,34 +131,44 @@ func (e *Engine) syncAll(accountID string, p provider.MailProvider, push bool) e
 }
 
 func (e *Engine) syncFolder(accountID string, ref account.SyncRef, p provider.MailProvider) error {
-	fs, err := p.SyncFolder(provider.FolderRef{
-		FolderID:    ref.FolderID,
-		MailboxName: ref.MailboxName,
-		UIDValidity: ref.UIDValidity,
-		LastUID:     ref.LastUID,
-	})
-	if err != nil {
-		return err
-	}
+	incremental := ref.LastUID != 0
 
-	// UIDVALIDITY changed on the server: local UIDs are meaningless.
-	if ref.UIDValidity != 0 && fs.UIDValidity != ref.UIDValidity {
+	// UIDVALIDITY changed on the server: local UIDs are meaningless. Checked
+	// before the first batch is stored (providers stream batches while they
+	// fetch) and once more after the provider returns.
+	wiped := false
+	wipeIfStale := func(uidValidity uint32) error {
+		if wiped || ref.UIDValidity == 0 || uidValidity == ref.UIDValidity {
+			return nil
+		}
 		if err := e.messages.WipeFolder(ref.FolderID); err != nil {
 			return fmt.Errorf("wipe folder: %w", err)
 		}
+		wiped = true
+		return nil
 	}
 
-	incremental := ref.LastUID != 0
-	if len(fs.Messages) > 0 {
-		// M8: load the enabled rules once per folder sync
-		rules, ruleErr := rule.New(e.db).ForAccount(accountID)
-		if ruleErr != nil {
-			log.Printf("load rules for %s: %v", accountID, ruleErr)
+	// ingest parses, threads, rules-matches and stores one batch of raw
+	// messages in its own transaction: a first sync of big messages holds one
+	// batch in memory, not the whole window.
+	var rules []domain.Rule
+	rulesLoaded := false
+	ingest := func(raws []provider.RawMessage) error {
+		if len(raws) == 0 {
+			return nil
+		}
+		if !rulesLoaded {
+			// M8: load the enabled rules once per folder sync
+			var ruleErr error
+			if rules, ruleErr = rule.New(e.db).ForAccount(accountID); ruleErr != nil {
+				log.Printf("load rules for %s: %v", accountID, ruleErr)
+			}
+			rulesLoaded = true
 		}
 		var pendingReads []uint32
 
-		batch := make([]domain.Message, 0, len(fs.Messages))
-		for _, raw := range fs.Messages {
+		batch := make([]domain.Message, 0, len(raws))
+		for _, raw := range raws {
 			msg, err := mime.Parse(raw.Data)
 			if err != nil {
 				// skip unparseable messages; never abort the whole sync
@@ -224,6 +234,30 @@ func (e *Engine) syncFolder(accountID string, ref account.SyncRef, p provider.Ma
 				log.Printf("rule mark read %s: %v", ref.MailboxName, err)
 			}
 		}
+		return nil
+	}
+
+	fs, err := p.SyncFolder(provider.FolderRef{
+		FolderID:    ref.FolderID,
+		MailboxName: ref.MailboxName,
+		UIDValidity: ref.UIDValidity,
+		LastUID:     ref.LastUID,
+		OnBatch: func(uidValidity uint32, raws []provider.RawMessage) error {
+			if err := wipeIfStale(uidValidity); err != nil {
+				return err
+			}
+			return ingest(raws)
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if err := wipeIfStale(fs.UIDValidity); err != nil {
+		return err
+	}
+	// providers that do not stream (JMAP, Graph) return everything here
+	if err := ingest(fs.Messages); err != nil {
+		return err
 	}
 
 	// Reconcile server-side deletions: local UIDs missing from the server.

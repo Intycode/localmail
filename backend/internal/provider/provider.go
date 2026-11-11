@@ -18,6 +18,12 @@ type FolderRef struct {
 	MailboxName string // remote IMAP mailbox name (folders.imap_name)
 	UIDValidity uint32 // last known UIDVALIDITY (0 = never synced)
 	LastUID     uint32 // last synced UID (0 = never synced)
+	// OnBatch, when set, receives the new messages in batches while the
+	// provider fetches (UIDVALIDITY of the folder + raw messages) and they
+	// are NOT repeated in FolderSync.Messages: memory stays bounded by one
+	// batch. Providers that cannot stream ignore it and return everything in
+	// FolderSync.Messages. An error aborts the folder sync.
+	OnBatch func(uidValidity uint32, msgs []RawMessage) error
 }
 
 // FolderSync is the result of syncing one folder.
