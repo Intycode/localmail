@@ -297,7 +297,7 @@ export function ThreadPage({ thread, messages, isDraft, folderType, embedded }: 
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl px-5 pt-6 pb-10">
+      <div className={cn("px-5 pt-6 pb-10", !embedded && "mx-auto max-w-3xl")}>
         <div className="mb-5 min-w-0">
           <h2 className="text-xl font-semibold tracking-tight">{thread.subject}</h2>
           <p className="mt-1 text-[13px] text-muted-foreground">

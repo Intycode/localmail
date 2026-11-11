@@ -21,6 +21,8 @@ import {
   autoBackupDir,
   autoBackupLastRun,
   getSetting,
+  syncIntervalMinutes,
+  setSyncIntervalMinutes,
   sendUndoSeconds,
   setAutoBackupDir,
   setSendUndoSeconds,
@@ -153,6 +155,7 @@ export function SettingsPage() {
             <ToggleRow def={notificationsToggle} />
             <ToggleRow def={keyboardToggle} />
             <SendUndoRow />
+            <SyncIntervalRow />
           </Section>
 
           <Section titleKey="settings.appearance" icon={Palette}>
@@ -245,6 +248,40 @@ function SendUndoRow() {
           {undoOptions.map((s) => (
             <SelectItem key={s} value={String(s)}>
               {s === 0 ? t("settings.undoDisabled") : t("settings.seconds", { n: s })}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+/** Auto-sync interval picker: 0 = only at startup. */
+const syncOptions = [0, 5, 15, 30, 60]
+
+function SyncIntervalRow() {
+  const t = useT()
+  const [value, setValue] = React.useState(() => syncIntervalMinutes())
+  return (
+    <div className="flex items-center gap-4 px-4 py-3.5">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="font-semibold">{t("settings.syncInterval")}</span>
+        <span className="text-[13px] text-muted-foreground">{t("settings.syncIntervalDesc")}</span>
+      </span>
+      <Select
+        value={String(value)}
+        onValueChange={(v) => {
+          setValue(Number(v))
+          setSyncIntervalMinutes(Number(v))
+        }}
+      >
+        <SelectTrigger className="w-40" aria-label={t("settings.syncInterval")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {syncOptions.map((m) => (
+            <SelectItem key={m} value={String(m)}>
+              {m === 0 ? t("settings.syncStartup") : t("settings.minutes", { n: m })}
             </SelectItem>
           ))}
         </SelectContent>

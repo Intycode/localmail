@@ -10,8 +10,10 @@ import {
   Inbox,
   Mails,
   PenLine,
+  RefreshCw,
   Search,
   Send,
+  SendHorizontal,
   Settings,
   ShieldAlert,
   Trash2,
@@ -24,8 +26,10 @@ import { routerStore } from "@/lib/router"
 import { useT } from "@/lib/i18n"
 import { switchAccount } from "@/lib/useAccounts"
 import type { Account, Folder } from "@/types"
+import { syncAll, syncStore } from "@/services/syncService"
 import { AccountAvatar } from "@/components/app/AccountAvatar"
 import { AppLogo } from "@/components/app/AppLogo"
+import { OutboxDialog } from "@/components/app/OutboxDialog"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -92,6 +96,7 @@ export function AppSidebar({
   const activeAccount = accounts.find((a) => a.isActive) ?? accounts[0]
   // Unified view entry: meaningful only with more than one account. The badge
   // sums every account's inbox unread count.
+  const syncing = React.useSyncExternalStore(syncStore.subscribe, syncStore.get, syncStore.get).running
   const showUnified = accounts.length >= 2
   const unifiedUnread = accounts.reduce(
     (sum, a) =>
@@ -125,6 +130,16 @@ export function AppSidebar({
             <a href="/search" aria-current={route === "search" ? "page" : undefined}>
               <Search />
             </a>
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={t("accounts.sync")}
+            title={t("accounts.sync")}
+            disabled={syncing}
+            onClick={() => void syncAll()}
+          >
+            <RefreshCw className={syncing ? "animate-spin" : undefined} />
           </Button>
         </div>
       </SidebarHeader>
@@ -164,17 +179,33 @@ export function AppSidebar({
                 const Icon = folderIcons[f.type] ?? FolderIcon
                 const active = inMail && f.id === activeFolderId
                 return (
-                  <SidebarMenuItem key={f.id}>
-                    <SidebarMenuButton asChild isActive={active} tooltip={formatFolderName(f.name)}>
-                      <a href={`/?folder=${f.id}`} aria-current={active ? "page" : undefined}>
-                        <Icon />
-                        <span>{formatFolderName(f.name)}</span>
-                      </a>
-                    </SidebarMenuButton>
-                    {f.unread > 0 && (
-                      <SidebarMenuBadge className="tabular-nums">{f.unread}</SidebarMenuBadge>
+                  <React.Fragment key={f.id}>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={active}
+                        tooltip={formatFolderName(f.name)}
+                      >
+                        <a href={`/?folder=${f.id}`} aria-current={active ? "page" : undefined}>
+                          <Icon />
+                          <span>{formatFolderName(f.name)}</span>
+                        </a>
+                      </SidebarMenuButton>
+                      {f.unread > 0 && (
+                        <SidebarMenuBadge className="tabular-nums">{f.unread}</SidebarMenuBadge>
+                      )}
+                    </SidebarMenuItem>
+                    {f.type === "sent" && (
+                      <SidebarMenuItem>
+                        <OutboxDialog>
+                          <SidebarMenuButton tooltip={t("outbox.title")}>
+                            <SendHorizontal />
+                            <span>{t("outbox.title")}</span>
+                          </SidebarMenuButton>
+                        </OutboxDialog>
+                      </SidebarMenuItem>
                     )}
-                  </SidebarMenuItem>
+                  </React.Fragment>
                 )
               })}
             </SidebarMenu>

@@ -48,6 +48,14 @@ export const it: Record<string, string> = {
   "offline.message": "Offline: invii e modifiche partiranno al ritorno della connessione.",
   "offline.retrying": "Operazioni in coda: nuovo tentativo in corso.",
 
+  // --- posta in uscita ---
+  "outbox.title": "In uscita",
+  "outbox.description": "Messaggi in attesa di invio: annulla quelli che non vuoi più spedire.",
+  "outbox.empty": "Nessun messaggio in uscita.",
+  "outbox.to": "A: {to}",
+  "outbox.at": "invio {date}",
+  "outbox.sending": "invio in corso…",
+
   // --- cartelle ---
   "folder.inbox": "Posta in arrivo",
   "folder.sent": "Inviate",
@@ -369,6 +377,10 @@ export const it: Record<string, string> = {
     "Il messaggio parte dopo qualche secondo: nel frattempo puoi annullarlo.",
   "settings.undoDisabled": "Disattivata",
   "settings.seconds": "{n} secondi",
+  "settings.syncInterval": "Sincronizzazione",
+  "settings.syncIntervalDesc": "Ogni quanto controllare la nuova posta. Sincronizza sempre all'avvio.",
+  "settings.syncStartup": "Solo all'avvio",
+  "settings.minutes": "Ogni {n} minuti",
   "settings.appearance": "Aspetto",
   "settings.theme": "Tema",
   "settings.themeSystem": "Sistema",

@@ -102,7 +102,11 @@ export function TitleBar() {
             label={t("window.maximize")}
             colorClass="bg-[#28c840]"
             focused={focused}
-            onClick={() => void getCurrentWindow().toggleMaximize()}
+            // toggleMaximize is a no-op on borderless macOS windows: use fullscreen.
+            onClick={async () => {
+              const win = getCurrentWindow()
+              await win.setFullscreen(!(await win.isFullscreen()))
+            }}
           >
             <Plus
               strokeWidth={3}

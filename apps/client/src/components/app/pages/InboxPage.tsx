@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { dayLabel, formatDate, formatFolderName, initials, shortSender } from "@/lib/format"
-import { getSetting } from "@/lib/settings"
+import { getSetting, getSettingString, setSettingString } from "@/lib/settings"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useT } from "@/lib/i18n"
 import { getMailService } from "@/services/serviceRegistry"
@@ -39,6 +39,9 @@ function viewKey(folderId: string, accountId?: string): string {
  * In the unified view (`?account=all`) every account's inbox merges into one
  * newest-first list and each row carries an account badge.
  */
+const LIST_MIN = 260
+const LIST_MAX = 720
+
 export function InboxPage({
   threads: initialThreads,
   folderId: folderIdProp,
@@ -52,6 +55,17 @@ export function InboxPage({
   // Desktop: rows open the thread in the reading pane; mobile keeps /thread.
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const isMobile = useIsMobile()
+  // Draggable divider: list width in px (the reader takes the rest), persisted.
+  const [listW, setListW] = React.useState(416)
+  React.useEffect(() => {
+    const saved = Number(getSettingString("list-width"))
+    if (saved >= LIST_MIN && saved <= LIST_MAX) setListW(saved)
+  }, [])
+  const resize = (w: number) => {
+    const v = Math.min(LIST_MAX, Math.max(LIST_MIN, Math.round(w)))
+    setListW(v)
+    setSettingString("list-width", String(v))
+  }
 
   // The router passes the folder explicitly; deep loads without it fall back
   // to the URL param. Never touch window during render: Astro prerenders.
@@ -208,7 +222,8 @@ export function InboxPage({
     <div className="flex min-h-0 flex-1">
       <section
         aria-label={title}
-        className="flex min-h-0 w-full min-w-0 flex-col md:w-[22rem] md:shrink-0 md:border-r md:border-border lg:w-[26rem]"
+        style={{ "--list-w": `${listW}px` } as React.CSSProperties}
+        className="flex min-h-0 w-full min-w-0 flex-col md:w-[var(--list-w)] md:shrink-0 md:border-r md:border-border"
       >
         <header className="shrink-0 border-b border-border px-4 pt-3.5 pb-3">
           <h1 className="truncate text-[17px] font-semibold tracking-tight">{title}</h1>
@@ -220,6 +235,27 @@ export function InboxPage({
         </header>
         {list}
       </section>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-valuenow={listW}
+        aria-valuemin={LIST_MIN}
+        aria-valuemax={LIST_MAX}
+        tabIndex={0}
+        className="-ml-1 hidden w-2 shrink-0 cursor-col-resize touch-none hover:bg-primary/20 focus-visible:bg-primary/30 focus-visible:outline-none md:block"
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId)
+        }}
+        onPointerMove={(e) => {
+          if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+          const left = e.currentTarget.parentElement!.getBoundingClientRect().left
+          resize(e.clientX - left)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") resize(listW - 16)
+          if (e.key === "ArrowRight") resize(listW + 16)
+        }}
+      />
       <div className="hidden min-h-0 min-w-0 flex-1 flex-col md:flex">
         {selectedId ? (
           <ThreadPageLoader key={selectedId} threadId={selectedId} embedded />

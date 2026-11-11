@@ -2,6 +2,7 @@ import { getMailService } from "./serviceRegistry"
 import { isTauri } from "./tauriMailService"
 import { notifyNewMessage } from "../lib/notifications"
 import type { SyncEvent } from "../types"
+import { syncIntervalMinutes } from "../lib/settings"
 import { Store } from "../lib/store"
 import { setAccounts } from "../stores/accountStore"
 import { setThreads } from "../stores/threadStore"
@@ -48,6 +49,34 @@ export function syncAccount(accountId: string): void {
         },
       }))
     })
+}
+
+/** Syncs every account (manual icon, startup and timer all use this). */
+export async function syncAll(): Promise<void> {
+  if (!isTauri() || syncStore.get().running) return
+  try {
+    const accounts = await (await getMailService()).getAccounts()
+    accounts.forEach((a) => syncAccount(a.id))
+  } catch {
+    // engine not ready: next tick retries
+  }
+}
+
+let autoTimer: ReturnType<typeof setInterval> | null = null
+
+/** Sync at startup, then every `sync-interval` minutes (0 = startup only). Idempotent. */
+export function startAutoSync(): void {
+  if (!isTauri() || autoTimer) return
+  void syncAll()
+  let last = Date.now()
+  // 1-minute tick reads the setting live, so changing it needs no restart
+  autoTimer = setInterval(() => {
+    const min = syncIntervalMinutes()
+    if (min > 0 && Date.now() - last >= min * 60_000) {
+      last = Date.now()
+      void syncAll()
+    }
+  }, 60_000)
 }
 
 let unlisten: (() => void) | null = null

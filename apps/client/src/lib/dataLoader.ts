@@ -56,9 +56,6 @@ export async function loadInitialData(): Promise<void> {
   const threads = await service.getThreads(activeFolder.id)
   uiStore.update((s) => ({ ...s, activeFolderId: activeFolder.id }))
   setThreads(activeFolder.id, threads)
-
-  // background sync: never blocks the initial render
-  void service.sync(accountId).catch(() => undefined)
 }
 
 /** Load the messages of a thread into the message store. */

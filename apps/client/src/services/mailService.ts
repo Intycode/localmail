@@ -30,6 +30,16 @@ export interface ThreadListOptions {
   folderType?: string
 }
 
+/** One parked operation in the engine's outbox (backend queue.Op). */
+export interface OutboxItem {
+  id: string
+  kind: string
+  payload: string
+  nextAttemptAt: string
+  attempts: number
+  lastError?: string
+}
+
 export interface MailService {
   getAccounts(): Promise<Account[]>
 
@@ -95,6 +105,9 @@ export interface MailService {
 
   /** Cancels one queued operation (undo-send / scheduled send). */
   cancelQueuedOp?(opId: string): Promise<void>
+
+  /** Lists the queued operations (newest first); payload is the op's JSON params. */
+  listOutbox?(): Promise<OutboxItem[]>
 
   /** Saves a draft (create or update) and returns its id. */
   saveDraft(draft: DraftInput): Promise<string>

@@ -47,6 +47,14 @@ export const en: Record<string, string> = {
   "offline.message": "Offline: sends and changes will go out when the connection is back.",
   "offline.retrying": "Queued operations: retrying.",
 
+  // --- outbox ---
+  "outbox.title": "Outbox",
+  "outbox.description": "Messages waiting to be sent: cancel the ones you no longer want to send.",
+  "outbox.empty": "No outgoing messages.",
+  "outbox.to": "To: {to}",
+  "outbox.at": "sends {date}",
+  "outbox.sending": "sending…",
+
   // --- folders ---
   "folder.inbox": "Inbox",
   "folder.sent": "Sent",
@@ -367,6 +375,10 @@ export const en: Record<string, string> = {
     "The message leaves after a few seconds; until then you can cancel it.",
   "settings.undoDisabled": "Disabled",
   "settings.seconds": "{n} seconds",
+  "settings.syncInterval": "Sync",
+  "settings.syncIntervalDesc": "How often to check for new mail. Always syncs at startup.",
+  "settings.syncStartup": "Only at startup",
+  "settings.minutes": "Every {n} minutes",
   "settings.appearance": "Appearance",
   "settings.theme": "Theme",
   "settings.themeSystem": "System",

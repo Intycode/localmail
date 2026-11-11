@@ -13,7 +13,7 @@ import type {
   SearchResult,
   Thread,
 } from "../types"
-import type { MailService, ThreadListOptions } from "./mailService"
+import type { MailService, OutboxItem, ThreadListOptions } from "./mailService"
 
 /**
  * TauriMailService — MailService backed by the Go engine through the Tauri
@@ -384,6 +384,11 @@ export class TauriMailService implements MailService, AccountAdminService {
   /** Cancels one queued operation (undo-send / scheduled send). */
   async cancelQueuedOp(opId: string): Promise<void> {
     await engineInvoke("outbox.cancel", { id: opId })
+  }
+
+  async listOutbox(): Promise<OutboxItem[]> {
+    const res = await engineInvoke<{ items: OutboxItem[] | null }>("outbox.list", {})
+    return res.items ?? []
   }
 
   async sync(accountId: string): Promise<void> {

@@ -53,6 +53,15 @@ export function setSettingString(key: string, value: string): void {
   window.localStorage.setItem(PREFIX + key, value)
 }
 
+/** Auto-sync interval in minutes; 0 = only at startup (default). */
+export function syncIntervalMinutes(): number {
+  return Number(getSettingString("sync-interval", "0")) || 0
+}
+
+export function setSyncIntervalMinutes(min: number): void {
+  setSettingString("sync-interval", String(min))
+}
+
 /** Directory for the automatic daily backup (empty = not configured). */
 export function autoBackupDir(): string {
   return getSettingString("autobackup-dir")

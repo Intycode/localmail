@@ -6,7 +6,7 @@ import { onboardingDone, setOnboardingDone } from "@/lib/settings"
 import { shouldShowOnboarding } from "@/lib/onboarding"
 import { accountStore, setAccounts } from "@/stores/accountStore"
 import { getMailService } from "@/services/serviceRegistry"
-import { wireEventStream } from "@/services/syncService"
+import { startAutoSync, wireEventStream } from "@/services/syncService"
 import { isTauri } from "@/services/tauriMailService"
 import type { Account, Folder, Thread } from "@/types"
 import { AppShell } from "./AppShell"
@@ -78,6 +78,7 @@ export default function MailApp(props: MailAppProps) {
     })
     if (isTauri()) {
       void wireEventStream()
+      startAutoSync()
       void (async () => {
         try {
           const svc = await getMailService()
