@@ -6,6 +6,7 @@ import {
   composeHtmlBody,
   displayBody,
   restoreQuoteCtx,
+  signatureHtml,
   stripQuoteMarks,
   typedPart,
 } from "./composeQuote"
@@ -132,4 +133,35 @@ test("drafts saved in another UI language still restore their quote", () => {
   const restored = restoreQuoteCtx(draft)
   expect(restored?.marker).toBe(enCtx.marker)
   expect(restored?.text).toBe(enCtx.text)
+})
+
+test("signature: after the typed text, before the quote, in both parts", () => {
+  const ctx = buildQuoteCtx(msg({ bodyText: "originale", body: "originale" }))
+  const sig = { text: "Dario\n<Intycode>", image: "data:image/png;base64,AAAA" }
+  const text = buildTextPart("risposta\n", ctx, sig)
+  expect(text.startsWith("risposta\n\n-- \nDario\n<Intycode>\n\n")).toBe(true)
+  expect(text.indexOf("Dario")).toBeLessThan(text.indexOf("> originale"))
+  const html = composeHtmlBody("risposta", ctx, sig)
+  expect(html).toContain('<p style="margin:0">Dario<br>&lt;Intycode&gt;</p>')
+  expect(html).toContain('<img src="data:image/png;base64,AAAA" alt="">')
+  expect(html.indexOf("Dario")).toBeLessThan(html.indexOf("<img")) // default: below
+  expect(html.indexOf("signature")).toBeLessThan(html.indexOf("<blockquote"))
+  // image-only signature: nothing in the text part
+  expect(buildTextPart("x", null, { text: " ", image: "data:image/png;base64,AAAA" })).toBe("x")
+})
+
+test("signatureHtml: image position and width", () => {
+  const base = { text: "Dario", image: "data:image/png;base64,AAAA", imageWidth: 120 }
+  const above = signatureHtml({ ...base, imagePosition: "above" })
+  expect(above.indexOf("<img")).toBeLessThan(above.indexOf("Dario"))
+  expect(above).toContain('width="120" style="width:120px;max-width:100%;height:auto"')
+  const left = signatureHtml({ ...base, imagePosition: "left" })
+  expect(left).toContain("<table")
+  expect(left.indexOf("<img")).toBeLessThan(left.indexOf("Dario"))
+  const right = signatureHtml({ ...base, imagePosition: "right" })
+  expect(right.indexOf("Dario")).toBeLessThan(right.indexOf("<img"))
+  // a malformed image value never reaches the markup
+  expect(signatureHtml({ text: "x", image: 'data:image/png;base64,A"><script>' })).not.toContain(
+    "script",
+  )
 })

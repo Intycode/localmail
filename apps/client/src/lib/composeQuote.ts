@@ -1,5 +1,6 @@
 import type { Message } from "../types"
 import { dateLocale, t } from "./i18n"
+import type { Signature } from "./signature"
 
 /**
  * Quote helpers for the composer (pure functions, unit-testable).
@@ -124,17 +125,47 @@ export function typedPart(body: string, ctx: QuoteContext | null): string {
   return i >= 0 ? body.slice(0, i) : body
 }
 
-/** Text part for the wire: what the user typed, then the header line and the
- *  quote as RFC-style text ("> " per line, one level). Without a context the
- *  body is sent as-is. */
-export function buildTextPart(body: string, ctx: QuoteContext | null): string {
-  if (!ctx) return body
-  const typed = body.replace(/\s+$/, "")
+/** Text part for the wire: what the user typed, the signature after the
+ *  conventional "-- " line, then the header line and the quote as RFC-style
+ *  text ("> " per line, one level). Without context/signature the body is
+ *  sent as-is. */
+export function buildTextPart(
+  body: string,
+  ctx: QuoteContext | null,
+  sig: Signature | null = null,
+): string {
+  const sigText = sig?.text.trim()
+  const signed = sigText ? `${body.replace(/\s+$/, "")}\n\n-- \n${sigText}` : body
+  if (!ctx) return signed
+  const typed = signed.replace(/\s+$/, "")
   const quoted = ctx.text
     .split("\n")
     .map((l) => (l === "" ? ">" : `> ${l}`))
     .join("\n")
   return `${typed}\n\n${ctx.marker}\n${quoted}\n`
+}
+
+/** Signature block for the HTML part (also the composer/dialog preview);
+ *  the image stays a data URL here, the engine converts it to an inline cid
+ *  part at send time. Side-by-side uses a table: the only layout every mail
+ *  client honours. */
+export function signatureHtml(sig: Signature): string {
+  const text = sig.text.trim()
+  const p = text ? `<p style="margin:0">${escapeHtml(text).replace(/\n/g, "<br>")}</p>` : ""
+  // strict shape: the value lands inside an attribute
+  const src = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(sig.image ?? "") ? sig.image : ""
+  const w = Math.round(sig.imageWidth ?? 0)
+  const size = w > 0 ? ` width="${w}" style="width:${w}px;max-width:100%;height:auto"` : ""
+  const img = src ? `<img src="${src}" alt=""${size}>` : ""
+  if (!p || !img) return p || img ? `<div class="signature">${p}${img}</div>` : ""
+  const pos = sig.imagePosition ?? "below"
+  if (pos === "above") return `<div class="signature">${img}<br>${p}</div>`
+  if (pos === "below") return `<div class="signature">${p}<br>${img}</div>`
+  const cell = (html: string, pad: string) =>
+    `<td style="vertical-align:middle;padding:0${pad}">${html}</td>`
+  const cells =
+    pos === "left" ? cell(img, " 12px 0 0") + cell(p, "") : cell(p, " 12px 0 0") + cell(img, "")
+  return `<div class="signature"><table cellpadding="0" cellspacing="0" border="0"><tr>${cells}</tr></table></div>`
 }
 
 function escapeHtml(s: string): string {
@@ -155,12 +186,15 @@ function textToHtml(text: string): string {
     .join("\n")
 }
 
-/** HTML part for send/draft: the typed text as paragraphs plus the original
- *  HTML quote (always, when a quote context exists: the editor does not host
- *  the quote, so it cannot be trimmed by editing the body). Empty when there
- *  is nothing beyond plain text — the engine then sends a simple text/plain. */
-export function composeHtmlBody(body: string, ctx: QuoteContext | null): string {
-  const typed = textToHtml(body)
-  if (!ctx) return typed
-  return [typed, ctx.html].filter(Boolean).join("\n")
+/** HTML part for send/draft: the typed text as paragraphs, the signature,
+ *  plus the original HTML quote (always, when a quote context exists: the
+ *  editor does not host the quote, so it cannot be trimmed by editing the
+ *  body). Empty when there is nothing beyond plain text — the engine then
+ *  sends a simple text/plain. */
+export function composeHtmlBody(
+  body: string,
+  ctx: QuoteContext | null,
+  sig: Signature | null = null,
+): string {
+  return [textToHtml(body), sig ? signatureHtml(sig) : "", ctx?.html].filter(Boolean).join("\n")
 }

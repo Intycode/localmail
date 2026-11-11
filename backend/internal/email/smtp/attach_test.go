@@ -227,3 +227,42 @@ func TestLoadFilesContentTypeCharsetStripped(t *testing.T) {
 		t.Errorf("content type carries parameters: %q", msg.Files[0].ContentType)
 	}
 }
+
+func TestComposeInlineImagesBecomeCid(t *testing.T) {
+	png := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3}
+	uri := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+	msg := domain.ComposeMessage{
+		To:       []domain.Recipient{{Email: "anna@acme.dev"}},
+		Subject:  "Firma",
+		Body:     "ciao",
+		HTMLBody: `<p>ciao</p><img src="` + uri + `" alt=""><img src="` + uri + `" alt="">`,
+	}
+	raw := Compose(domain.Recipient{Email: "luca@x.dev"}, msg)
+	s := string(raw)
+	if strings.Contains(s, "data:image") {
+		t.Errorf("data: URI left in the message")
+	}
+	if !strings.Contains(s, `Content-Type: multipart/related; boundary="`) {
+		t.Fatalf("missing multipart/related:\n%s", s)
+	}
+	if n := strings.Count(s, "Content-ID: <img1."); n != 1 {
+		t.Errorf("identical images must share one part, got %d", n)
+	}
+	if !strings.Contains(s, "Content-Disposition: inline; filename=\"image1.png\"") {
+		t.Errorf("missing inline disposition")
+	}
+	if !strings.Contains(s, base64.StdEncoding.EncodeToString(png)) {
+		t.Errorf("image payload missing")
+	}
+	// the result must still parse, with the html pointing at the cid part
+	parsed, err := enginemime.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !strings.Contains(parsed.Body, `src="cid:img1.`) {
+		t.Errorf("html does not reference the cid: %q", parsed.Body)
+	}
+	if len(parsed.Attachments) != 0 {
+		t.Errorf("inline image listed as attachment: %+v", parsed.Attachments)
+	}
+}

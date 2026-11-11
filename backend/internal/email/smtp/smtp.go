@@ -17,6 +17,7 @@ import (
 	stdmime "mime"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -198,7 +199,14 @@ func Compose(from domain.Recipient, msg domain.ComposeMessage) []byte {
 	// bodyPart writes the message body as a complete MIME part (headers +
 	// content, no trailing CRLF): text/plain, or multipart/alternative when
 	// an HTML variant is present (text first, html last per RFC 2046).
-	html := strings.TrimSpace(msg.HTMLBody)
+	// data: images in the HTML (the account signature) travel as inline cid
+	// parts: Gmail and Outlook drop data: URIs, cid images always show
+	html, inline := extractInlineImages(strings.TrimSpace(msg.HTMLBody))
+	writeHTMLPart := func() {
+		b.WriteString("Content-Type: text/html; charset=\"utf-8\"\r\n")
+		b.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
+		writeQuotedPrintable(&b, html)
+	}
 	writeBodyPart := func() {
 		if html != "" {
 			boundary := newBoundary()
@@ -208,9 +216,25 @@ func Compose(from domain.Recipient, msg domain.ComposeMessage) []byte {
 			b.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
 			writeQuotedPrintable(&b, msg.Body)
 			b.WriteString("\r\n--" + boundary + "\r\n")
-			b.WriteString("Content-Type: text/html; charset=\"utf-8\"\r\n")
-			b.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
-			writeQuotedPrintable(&b, html)
+			if len(inline) == 0 {
+				writeHTMLPart()
+			} else {
+				// html + its images: multipart/related (RFC 2387)
+				related := newBoundary()
+				b.WriteString("Content-Type: multipart/related; boundary=\"" + related + "\"\r\n\r\n")
+				b.WriteString("--" + related + "\r\n")
+				writeHTMLPart()
+				for i, im := range inline {
+					name := fmt.Sprintf("image%d.%s", i+1, im.subtype)
+					b.WriteString("\r\n--" + related + "\r\n")
+					b.WriteString("Content-Type: image/" + im.subtype + "; name=\"" + name + "\"\r\n")
+					b.WriteString("Content-Transfer-Encoding: base64\r\n")
+					b.WriteString("Content-ID: <" + im.cid + ">\r\n")
+					b.WriteString("Content-Disposition: inline; filename=\"" + name + "\"\r\n\r\n")
+					writeBase64(&b, im.data)
+				}
+				b.WriteString("\r\n--" + related + "--\r\n")
+			}
 			b.WriteString("\r\n--" + boundary + "--\r\n")
 			return
 		}
@@ -250,6 +274,35 @@ func Compose(from domain.Recipient, msg domain.ComposeMessage) []byte {
 	}
 	b.WriteString("\r\n--" + mixed + "--\r\n")
 	return []byte(b.String())
+}
+
+type inlineImage struct {
+	cid, subtype string
+	data         []byte
+}
+
+var dataImgRe = regexp.MustCompile(`src="data:image/(png|jpeg|gif|webp);base64,([A-Za-z0-9+/=]+)"`)
+
+// extractInlineImages rewrites every base64 data: image in html to a cid:
+// reference and returns the decoded images (identical ones share a part).
+func extractInlineImages(html string) (string, []inlineImage) {
+	var imgs []inlineImage
+	seen := map[string]string{}
+	out := dataImgRe.ReplaceAllStringFunc(html, func(m string) string {
+		sub := dataImgRe.FindStringSubmatch(m)
+		cid, ok := seen[sub[2]]
+		if !ok {
+			data, err := base64.StdEncoding.DecodeString(sub[2])
+			if err != nil {
+				return m
+			}
+			cid = fmt.Sprintf("img%d.%s@localmail", len(imgs)+1, strings.TrimPrefix(newBoundary(), "=_"))
+			seen[sub[2]] = cid
+			imgs = append(imgs, inlineImage{cid: cid, subtype: sub[1], data: data})
+		}
+		return `src="cid:` + cid + `"`
+	})
+	return out, imgs
 }
 
 // LoadFiles reads every outgoing attachment from disk into memory: size

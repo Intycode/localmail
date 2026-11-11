@@ -13,15 +13,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import type {
-  Account,
-  ComposeMessage,
-  Contact,
-  DraftInput,
-  Message,
-  OutgoingFile,
-  Recipient,
-} from "@/types"
+import type { Account, ComposeMessage, DraftInput, Message, OutgoingFile, Recipient } from "@/types"
 import { getMailService } from "@/services/serviceRegistry"
 import { isTauri, pickPath } from "@/services/tauriMailService"
 import { sendUndoSeconds } from "@/lib/settings"
@@ -43,13 +35,17 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { MessageBody } from "@/components/app/MessageBody"
+import { RecipientInput } from "@/components/app/RecipientInput"
 import { whiteMessageBackground } from "@/lib/settings"
+import { getSignature } from "@/lib/signature"
+import { cn } from "@/lib/utils"
 import {
   buildQuoteCtx,
   buildTextPart,
   composeHtmlBody,
   displayBody,
   restoreQuoteCtx,
+  signatureHtml,
   typedPart,
   type QuoteContext,
 } from "@/lib/composeQuote"
@@ -102,15 +98,28 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
   // content never round-trips the IPC bridge (engine reads them at send time)
   const [files, setFiles] = React.useState<OutgoingFile[]>([])
   const [picking, setPicking] = React.useState(false)
-  // compose autocomplete: recipients from the local mail history (the query
-  // is the whole field; the engine reads the last comma-separated entry)
-  const [contacts, setContacts] = React.useState<Contact[]>([])
   const draftIdRef = React.useRef<string | null>(null)
   const [contextLoaded, setContextLoaded] = React.useState(true)
   const dirtyRef = React.useRef(false)
   dirtyRef.current = dirty
 
   const markDirty = (): void => setDirty(true)
+
+  // signature of the account that actually sends (the active one): appended
+  // at send time only, so a reopened draft never accumulates copies
+  const [signature] = React.useState(() => {
+    const acc = accounts.find((a) => a.isActive) ?? accounts[0]
+    return acc ? getSignature(acc.id) : null
+  })
+
+  // grow the editor with its text (webviews without CSS field-sizing)
+  const bodyRef = React.useRef<HTMLTextAreaElement>(null)
+  React.useLayoutEffect(() => {
+    const el = bodyRef.current
+    if (!el || !signature) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [body, signature])
 
   // M9: check whether the active account has a PGP private key in the vault
   React.useEffect(() => {
@@ -239,27 +248,6 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canSend, to, cc, subject, body])
 
-  // autocomplete suggestions, debounced, from the local history
-  React.useEffect(() => {
-    const query = to || cc
-    if (!query.trim()) {
-      setContacts([])
-      return
-    }
-    const t = setTimeout(() => {
-      void (async () => {
-        try {
-          const svc = await getMailService()
-          if (!svc.suggestContacts) return
-          setContacts(await svc.suggestContacts(query))
-        } catch {
-          // suggestions are best-effort: never disturb typing
-        }
-      })()
-    }, 150)
-    return () => clearTimeout(t)
-  }, [to, cc])
-
   /** Opens the native multi-file dialog and appends the picks (dedup by
    *  path). Browser dev has no paths: the engine would have nothing to
    *  read, so the feature is desktop-only with a clear message. */
@@ -308,7 +296,7 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
     setSending(true)
     const reply = replyRef.current
     const editingDraft = draftIdRef.current
-    const htmlBody = composeHtmlBody(body, quoteCtx)
+    const htmlBody = composeHtmlBody(body, quoteCtx, signature)
     // undo-send: the configured window parks the message in the engine's
     // outbox queue; the toast's "Annulla" action cancels it. A user-chosen
     // sendAt (Programma invio) is used as-is.
@@ -321,7 +309,7 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
       cc: parseRecipients(cc),
       bcc: [],
       subject: subject.trim() || t("inbox.noSubject"),
-      body: buildTextPart(body, quoteCtx).trim(),
+      body: buildTextPart(body, quoteCtx, signature).trim(),
       // text + html go out as multipart/alternative: the quoted previous
       // message reaches the recipient in its original HTML form
       ...(htmlBody ? { htmlBody } : {}),
@@ -459,22 +447,15 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
             />
           )}
         </ComposeRow>
-        <datalist id="contacts-suggestions">
-          {contacts.map((c) => (
-            <option key={c.email} value={c.email} label={c.name || c.email} />
-          ))}
-        </datalist>
         <ComposeRow id="c-to" label={t("compose.to")}>
-          <Input
+          <RecipientInput
             id="c-to"
             value={to}
-            onChange={(e) => {
-              setTo(e.target.value)
+            onChange={(v) => {
+              setTo(v)
               markDirty()
             }}
             placeholder={t("compose.toPlaceholder")}
-            list="contacts-suggestions"
-            autoComplete="off"
             autoFocus
             className="h-11 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
@@ -486,15 +467,13 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
         </ComposeRow>
         {ccOpen && (
           <ComposeRow id="c-cc" label={t("compose.cc")}>
-            <Input
+            <RecipientInput
               id="c-cc"
               value={cc}
-              onChange={(e) => {
-                setCc(e.target.value)
+              onChange={(v) => {
+                setCc(v)
                 markDirty()
               }}
-              list="contacts-suggestions"
-              autoComplete="off"
               className="h-11 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
           </ComposeRow>
@@ -521,8 +500,30 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
             markDirty()
           }}
           placeholder={t("compose.bodyPlaceholder")}
-          className="min-h-64 flex-1 resize-none rounded-none border-0 bg-transparent px-5 py-4 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 dark:bg-transparent"
+          ref={bodyRef}
+          rows={1}
+          className={cn(
+            "resize-none rounded-none border-0 bg-transparent px-5 py-4 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 dark:bg-transparent",
+            // with a signature the editor hugs its text, so the signature
+            // sits right under the line being written
+            signature ? "min-h-0 shrink-0 overflow-hidden" : "min-h-64 flex-1",
+          )}
         />
+        {signature && (
+          <>
+            <div
+              className="px-5 pb-3 text-sm text-muted-foreground"
+              // own markup: text escaped and image validated by signatureHtml
+              dangerouslySetInnerHTML={{ __html: signatureHtml(signature) }}
+            />
+            {/* the empty rest of the sheet still focuses the editor */}
+            <div
+              className="min-h-8 flex-1 cursor-text"
+              onClick={() => bodyRef.current?.focus()}
+              aria-hidden
+            />
+          </>
+        )}
         {quoteCtx && quotePreview && (
           <div className="flex flex-col gap-1 px-5 pb-3">
             <Button

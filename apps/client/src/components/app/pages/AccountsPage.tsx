@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Mail, Pencil, Plus, RefreshCw, Trash2, UserCheck } from "lucide-react"
+import { Mail, Pencil, PenLine, Plus, RefreshCw, Trash2, UserCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AccountAvatar } from "@/components/app/AccountAvatar"
 import { AvatarDialog } from "@/components/app/AvatarDialog"
+import { SignatureDialog } from "@/components/app/SignatureDialog"
 import { CopyButton } from "@/components/app/CopyButton"
 import { AccountConnectForm } from "@/components/app/AccountConnectForm"
 import {
@@ -166,6 +167,16 @@ function AccountCard({ account }: { account: Account }) {
           <RefreshCw data-icon="inline-start" className={syncing ? "animate-spin" : undefined} />
           {syncing ? t("accounts.syncing") : t("accounts.sync")}
         </Button>
+        <SignatureDialog
+          accountId={account.id}
+          name={account.name}
+          trigger={
+            <Button variant="outline" size="sm">
+              <PenLine data-icon="inline-start" />
+              {t("signature.button")}
+            </Button>
+          }
+        />
         {isTauri() && (
           <Dialog>
             <DialogTrigger asChild>
