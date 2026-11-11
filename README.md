@@ -250,7 +250,7 @@ Contributions are welcome. Before you start:
 ## Security
 
 Please **do not open a public issue** for a vulnerability. Report it privately
-through [GitHub Security Advisories](https://github.com/Intycode/mail/security/advisories/new).
+through [GitHub Security Advisories](https://github.com/Intycode/localmail/security/advisories/new).
 
 ## License
 
