@@ -87,12 +87,17 @@ async function buildMac(env: Record<string, string>): Promise<Built> {
 }
 
 async function buildWindows(env: Record<string, string>): Promise<Built> {
+  // from PowerShell, `bash` is WSL's (System32): it sees neither Go nor signtool. Put Git Bash first.
+  const gitBin = join((await $`git --exec-path`.text()).trim(), "../../../bin") // <git>/mingw64/libexec/git-core
+  const pathKey = Object.keys(env).find((k) => k.toUpperCase() === "PATH") ?? "PATH"
+  env[pathKey] = `${gitBin};${env[pathKey]}`
   step("Motore Go (x64)")
   await $`bun run engine:build`.env(env)
   step("Frontend + app Tauri + installer NSIS + firma updater (diversi minuti)")
   await $`bunx tauri build --config src-tauri/tauri.conf.json --bundles nsis`.env(env)
   step("Firma Authenticode (token USB)")
-  await $`bash scripts/sign-windows.sh`.env(env)
+  // Bun's $ resolves commands from its own PATH, not env's: name Git Bash explicitly
+  await $`${join(gitBin, "bash.exe")} scripts/sign-windows.sh`.env(env)
   const updater = join(ROOT, `src-tauri/target/release/bundle/nsis/LocalMail_${version()}_x64-setup.exe`)
   return { files: [updater, `${updater}.sig`], updater, platforms: ["windows-x86_64"] }
 }
