@@ -134,9 +134,18 @@ pub fn delete_secret(account_id: &str) -> Result<(), String> {
 /// Tauri hands it to the engine process via the MAIL_DB_KEY env var at
 /// spawn. Losing this keychain entry means losing access to the local
 /// database: it is encrypted at rest by design.
-pub fn db_key() -> Result<String, String> {
+///
+/// encrypted_db_exists: an encrypted database file is already on disk. A
+/// missing key is then an error, never a reason to mint a new key: that
+/// would leave the data unreadable (and the engine would archive the file).
+/// The user restores the key from the recovery key file instead.
+pub fn db_key(encrypted_db_exists: bool) -> Result<String, String> {
     match get("db/master")? {
         Some(k) if !k.is_empty() => Ok(k),
+        _ if encrypted_db_exists => Err(
+            "chiave del database non trovata nel portachiavi: importa la chiave di recupero (Impostazioni → Backup)"
+                .into(),
+        ),
         // missing (first run) or empty: generate and store
         _ => {
             use rand::RngCore;

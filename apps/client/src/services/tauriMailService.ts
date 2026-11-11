@@ -86,6 +86,13 @@ export const ioService = {
   async backupRestore(src: string): Promise<void> {
     await call<void>("backup_restore", { src })
   },
+  // the key itself never reaches the webview: Rust writes/reads the file
+  async recoveryKeyExport(dest: string): Promise<void> {
+    await call<void>("recovery_key_export", { dest })
+  },
+  async recoveryKeyImport(src: string): Promise<void> {
+    await call<void>("recovery_key_import", { src })
+  },
 }
 
 /** SemanticSearchService — optional embedding layer (M10): status of the

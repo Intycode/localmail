@@ -74,6 +74,21 @@ posta configurati dall'utente. Niente cloud, niente telemetry, niente AI.
   mai il webview.
 - Senza chiave (perde la keychain, keychain negata) l'engine **non parte**:
   fallisce esplicitamente invece di creare un secondo database in chiaro.
+  Se il file del database cifrato esiste ma la voce `db/master` manca (nuovo
+  computer, keychain azzerata), l'app non genera una chiave nuova: mostra
+  "chiave del database non trovata nel portachiavi" e chiede di importare la
+  chiave di recupero.
+- **Chiave di recupero** (Impostazioni → Backup): "Esporta" scrive la chiave
+  (64 caratteri esadecimali) in un file scelto dall'utente; "Importa" la legge
+  da un file, la valida, conserva la chiave precedente nel keychain come
+  `db/master.prev` e ferma il motore (riparte con la nuova chiave alla
+  richiesta successiva). Entrambe le operazioni avvengono in Rust: la chiave
+  non attraversa mai il webview.
+  **Limite**: il file è in **chiaro**. Chi ha il file e un backup del database
+  può leggere la posta, quindi va tenuto separato dal backup (password
+  manager, non nella stessa cartella/cloud). Cifrarlo con una passphrase
+  richiede una KDF (nuova dipendenza): da fare se il file dovrà viaggiare
+  insieme al backup.
 - Un database pre-esistente **in chiaro** (pre-M3) viene archiviato come
   `mail.db.plain.bak` e ricreato cifrato: l'upgrade non rompe l'app e non
   lascia il vecchio file attivo. Cancellare il `.plain.bak` dopo

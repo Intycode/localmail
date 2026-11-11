@@ -70,6 +70,8 @@ pub fn run() {
             pgp::pgp_delete,
             engine::backup_create,
             engine::backup_restore,
+            engine::recovery_key_export,
+            engine::recovery_key_import,
             paths::pick_path
         ])
         .build(tauri::generate_context!())

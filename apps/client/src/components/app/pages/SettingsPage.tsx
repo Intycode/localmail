@@ -1,6 +1,7 @@
 import * as React from "react"
 import {
   DatabaseBackup,
+  Download,
   Filter,
   FolderOpen,
   KeyRound,
@@ -12,6 +13,7 @@ import {
   SlidersHorizontal,
   Sun,
   Trash2,
+  Upload,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -39,7 +41,7 @@ import {
 } from "@/lib/theme"
 import { dateLocale, getLocale, LOCALES, setLocale, useT, type Locale } from "@/lib/i18n"
 import { getMailService } from "@/services/serviceRegistry"
-import { isTauri, pgpService, pickPath } from "@/services/tauriMailService"
+import { ioService, isTauri, pgpService, pickPath } from "@/services/tauriMailService"
 import { formatFolderName } from "@/lib/format"
 import { AISection } from "./SettingsAI"
 import { Button } from "@/components/ui/button"
@@ -187,6 +189,7 @@ export function SettingsPage() {
               }}
             />
             <AutoBackupDirRow />
+            <RecoveryKeyRows />
           </Section>
 
           <p className="text-xs text-muted-foreground">
@@ -331,6 +334,83 @@ function AutoBackupDirRow() {
         {picking ? "…" : dir ? t("backup.change") : t("backup.choose")}
       </Button>
     </div>
+  )
+}
+
+/** Recovery key: export it to open a backup elsewhere, import it on the new
+ *  computer. The key never passes through the webview (Rust reads/writes it). */
+function RecoveryKeyRows() {
+  const t = useT()
+  const [busy, setBusy] = React.useState(false)
+
+  async function run(job: () => Promise<void>, errorKey: string): Promise<void> {
+    if (!isTauri()) {
+      toast.error(t("common.desktopOnly"))
+      return
+    }
+    setBusy(true)
+    try {
+      await job()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : t(errorKey))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const exportKey = () =>
+    run(async () => {
+      const [dest] = await pickPath("save", {
+        defaultPath: "localmail-recovery-key.txt",
+        title: t("backup.keyDialogTitle"),
+        filters: [{ name: "Text", extensions: ["txt"] }],
+      })
+      if (!dest) return
+      await ioService.recoveryKeyExport(dest)
+      toast.success(t("backup.keyExported"))
+    }, "backup.keyExportError")
+
+  const importKey = () =>
+    run(async () => {
+      const { ask } = await import("@tauri-apps/plugin-dialog")
+      const [src] = await pickPath("open", {
+        title: t("backup.keyDialogTitle"),
+        filters: [{ name: "Text", extensions: ["txt"] }],
+      })
+      if (!src) return
+      const go = await ask(t("backup.keyImportConfirm"), {
+        title: t("backup.keyDialogTitle"),
+        kind: "warning",
+      })
+      if (!go) return
+      await ioService.recoveryKeyImport(src)
+      toast.success(t("backup.keyImported"))
+      setTimeout(() => window.location.reload(), 600)
+    }, "backup.keyImportError")
+
+  return (
+    <>
+      <div className="flex items-center gap-4 px-4 py-3.5">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="font-semibold">{t("backup.keyExport")}</span>
+          <span className="text-[13px] text-muted-foreground">{t("backup.keyExportDesc")}</span>
+        </span>
+        <Button variant="outline" size="sm" onClick={() => void exportKey()} disabled={busy}>
+          <Download data-icon="inline-start" />
+          {t("backup.keyExportBtn")}
+        </Button>
+      </div>
+      <div className="flex items-center gap-4 px-4 py-3.5">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="font-semibold">{t("backup.keyImport")}</span>
+          <span className="text-[13px] text-muted-foreground">{t("backup.keyImportDesc")}</span>
+        </span>
+        <Button variant="outline" size="sm" onClick={() => void importKey()} disabled={busy}>
+          <Upload data-icon="inline-start" />
+          {t("backup.keyImportBtn")}
+        </Button>
+      </div>
+    </>
   )
 }
 

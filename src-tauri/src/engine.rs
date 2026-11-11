@@ -147,7 +147,7 @@ impl Engine {
             // Database encryption key (M3): generated on first run, kept in the
             // OS keychain, passed via env — never written next to the database.
             // Fail-hard: an encrypted database cannot open without its key.
-            let db_key = crate::secrets::db_key()?;
+            let db_key = crate::secrets::db_key(db_is_encrypted(&self.db_path))?;
             let mut command = Command::new(&bin);
             #[cfg(target_os = "windows")]
             {
@@ -1016,4 +1016,108 @@ pub async fn backup_restore(
         })
     })
     .await)
+}
+
+/// db_is_encrypted: the file exists and is not a plaintext SQLite database
+/// (an old pre-M3 plaintext db is archived by the engine and recreated, so it
+/// needs no key). Unreadable or tiny files count as "no database".
+fn db_is_encrypted(path: &std::path::Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 16];
+    match std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)) {
+        Ok(()) => &head != b"SQLite format 3\0",
+        Err(_) => false,
+    }
+}
+
+/// recovery_key_export writes the database key to a file the user picked, so
+/// a backup can be opened on another computer (the key lives only in the OS
+/// keychain). The key is written here and never returned to the webview.
+///
+/// shortcut: the key file is PLAINTEXT hex. Anyone holding it plus a backup
+/// can read the mail: keep it apart from the backup (password manager).
+/// Encrypting it with a passphrase needs a KDF dependency: upgrade then.
+#[tauri::command]
+pub async fn recovery_key_export(
+    state: tauri::State<'_, Arc<Engine>>,
+    app: AppHandle,
+    dest: String,
+) -> Result<Value, ()> {
+    if let Err(e) = crate::paths::check(&app, &dest) {
+        return Ok(envelope(Err(e)));
+    }
+    Ok(run_engine(state, move |_| {
+        let key = crate::secrets::get("db/master")?
+            .filter(|k| !k.is_empty())
+            .ok_or_else(|| String::from("nessuna chiave del database da esportare"))?;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+        opts.open(&dest)
+            .and_then(|mut f| f.write_all(format!("{}\n", key).as_bytes()))
+            .map_err(|e| format!("scrittura della chiave di recupero non riuscita: {}", e))?;
+        Ok(json!({"ok": true}))
+    })
+    .await)
+}
+
+/// recovery_key_import replaces the database key with the one in a recovery
+/// key file (64 hex chars). The previous key is kept in the keychain as
+/// "db/master.prev". The engine is stopped; the next request restarts it with
+/// the new key (secrets::set updates the in-process cache too).
+#[tauri::command]
+pub async fn recovery_key_import(
+    state: tauri::State<'_, Arc<Engine>>,
+    app: AppHandle,
+    src: String,
+) -> Result<Value, ()> {
+    if let Err(e) = crate::paths::check(&app, &src) {
+        return Ok(envelope(Err(e)));
+    }
+    Ok(run_engine(state, move |engine| {
+        // a key file is ~65 bytes: refuse anything bigger before reading it
+        let too_big = std::fs::metadata(&src).map(|m| m.len() > 256).unwrap_or(false);
+        let raw = if too_big {
+            String::new()
+        } else {
+            std::fs::read_to_string(&src)
+                .map_err(|e| format!("lettura della chiave di recupero non riuscita: {}", e))?
+        };
+        let key = raw.trim().to_ascii_lowercase();
+        if key.len() != 64 || !key.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(String::from(
+                "il file non contiene una chiave di recupero valida (64 caratteri esadecimali)",
+            ));
+        }
+        engine.stopped(|| {
+            if let Some(old) = crate::secrets::get("db/master")?.filter(|k| !k.is_empty() && *k != key) {
+                crate::secrets::set("db/master.prev", &old)?;
+            }
+            crate::secrets::set("db/master", &key)?;
+            Ok(json!({"ok": true}))
+        })
+    })
+    .await)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::db_is_encrypted;
+
+    #[test]
+    fn db_is_encrypted_tells_plaintext_from_encrypted() {
+        let dir = std::env::temp_dir().join(format!("lm-dbenc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = |name: &str, bytes: &[u8]| {
+            let p = dir.join(name);
+            std::fs::write(&p, bytes).unwrap();
+            p
+        };
+        assert!(!db_is_encrypted(&dir.join("missing.db")));
+        assert!(!db_is_encrypted(&f("tiny.db", b"abc")));
+        assert!(!db_is_encrypted(&f("plain.db", b"SQLite format 3\0rest")));
+        assert!(db_is_encrypted(&f("enc.db", &[0x9au8; 4096])));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

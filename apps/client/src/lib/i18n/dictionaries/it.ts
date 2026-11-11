@@ -516,6 +516,21 @@ export const it: Record<string, string> = {
   "backup.choose": "Scegli",
   "backup.change": "Cambia",
   "backup.dialogTitle": "Cartella di backup",
+  "backup.keyExport": "Chiave di recupero",
+  "backup.keyExportDesc":
+    "Salva la chiave del database in un file: serve per aprire un backup su un altro computer. Conservala a parte, in un password manager: chi ha la chiave e il backup può leggere le tue email.",
+  "backup.keyExportBtn": "Esporta",
+  "backup.keyExported": "Chiave di recupero salvata",
+  "backup.keyExportError": "Esportazione della chiave non riuscita",
+  "backup.keyImport": "Importa chiave di recupero",
+  "backup.keyImportDesc":
+    "Usa la chiave di un altro computer per aprire il suo backup. La chiave attuale viene conservata nel portachiavi.",
+  "backup.keyImportBtn": "Importa",
+  "backup.keyImportConfirm":
+    "La chiave attuale del database verrà sostituita da quella del file. Se non è la chiave giusta, le email locali non saranno leggibili finché non reimporti quella corretta. Continuare?",
+  "backup.keyImported": "Chiave importata: riavvio dell'app...",
+  "backup.keyImportError": "Importazione della chiave non riuscita",
+  "backup.keyDialogTitle": "Chiave di recupero",
 
   // --- impostazioni → sicurezza ---
 

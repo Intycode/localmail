@@ -511,6 +511,21 @@ export const en: Record<string, string> = {
   "backup.choose": "Choose",
   "backup.change": "Change",
   "backup.dialogTitle": "Backup folder",
+  "backup.keyExport": "Recovery key",
+  "backup.keyExportDesc":
+    "Saves the database key to a file: needed to open a backup on another computer. Keep it apart, in a password manager: anyone with the key and the backup can read your email.",
+  "backup.keyExportBtn": "Export",
+  "backup.keyExported": "Recovery key saved",
+  "backup.keyExportError": "Could not export the key",
+  "backup.keyImport": "Import recovery key",
+  "backup.keyImportDesc":
+    "Uses the key from another computer to open its backup. The current key is kept in the keychain.",
+  "backup.keyImportBtn": "Import",
+  "backup.keyImportConfirm":
+    "The current database key will be replaced by the one in the file. If it is the wrong key, your local mail stays unreadable until you import the right one. Continue?",
+  "backup.keyImported": "Key imported: reloading the app...",
+  "backup.keyImportError": "Could not import the key",
+  "backup.keyDialogTitle": "Recovery key",
 
   // --- settings → security ---
 
