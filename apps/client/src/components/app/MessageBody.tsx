@@ -160,7 +160,7 @@ export function MessageBody({ message, whiteBg }: { message: Message; whiteBg: b
         <div
           id={`msg-body-${message.id}`}
           className={cn(
-            "break-words text-sm [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_img]:max-w-full [&_table]:max-w-full [&_td]:align-top",
+            "break-words text-sm [contain:paint] overflow-x-auto [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_img]:max-w-full [&_table]:max-w-full [&_td]:align-top",
             whiteBg && "rounded-md bg-white p-3 text-[#1c1c1c]",
           )}
           dangerouslySetInnerHTML={{ __html: html }}
