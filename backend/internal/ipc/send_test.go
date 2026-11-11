@@ -219,3 +219,63 @@ func TestSendFlow(t *testing.T) {
 		t.Errorf("SMTP server should hold two messages, got:\n%s", f.msg)
 	}
 }
+
+// A delivered message must never come back as an error: the outbox would
+// retry it and the recipient would get it twice.
+func TestSendSucceedsWhenLocalPersistenceFails(t *testing.T) {
+	f := startFakeSMTP(t)
+	smtpHost, smtpPort := f.hostPort()
+
+	env := startEnv(t)
+	host, portRaw, _ := net.SplitHostPort(env.addr)
+	port, _ := strconv.Atoi(portRaw)
+
+	ok, data, errMsg := env.call(t, "p0", "accounts.add", map[string]any{
+		"name": "Luca", "email": "luca@x.dev",
+		"imap":          map[string]any{"host": host, "port": port, "security": "plain", "username": "luca"},
+		"smtp":          map[string]any{"host": smtpHost, "port": smtpPort, "security": "plain", "username": "luca@x.dev"},
+		"secret":        secret,
+		"allowInsecure": true,
+	})
+	if !ok {
+		t.Fatalf("accounts.add: %s", errMsg)
+	}
+	var acc struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &acc); err != nil {
+		t.Fatalf("decode account: %v", err)
+	}
+
+	// every insert into messages now fails
+	if _, err := env.app.DB.Exec(`CREATE TRIGGER fail_insert BEFORE INSERT ON messages
+		BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, data, errMsg = env.call(t, "p1", "send", map[string]any{
+		"accountId": acc.ID,
+		"secret":    secret,
+		"message": map[string]any{
+			"to":      []map[string]any{{"email": "bo@x.dev"}},
+			"subject": "Consegnata",
+			"body":    "Ciao",
+		},
+	})
+	if !ok {
+		t.Fatalf("send must report success once delivered, got error: %s", errMsg)
+	}
+	var sent struct {
+		Sent      bool   `json:"sent"`
+		MessageID string `json:"messageId"`
+	}
+	if err := json.Unmarshal(data, &sent); err != nil {
+		t.Fatal(err)
+	}
+	if !sent.Sent || sent.MessageID != "" {
+		t.Fatalf("unexpected response: %s", data)
+	}
+	if !strings.Contains(f.msg, "Subject: Consegnata") {
+		t.Errorf("message was not delivered over SMTP:\n%s", f.msg)
+	}
+}

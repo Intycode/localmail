@@ -1561,10 +1561,13 @@ func opSend(_ context.Context, app *App, params json.RawMessage) (any, error) {
 		}
 	}
 
-	// local persistence + thread resolution (a reply joins its thread)
+	// From here the message is delivered: nothing below may return an error,
+	// or the outbox would retry and send it twice. Local-copy failures are
+	// only logged; the Sent folder sync recovers the message.
 	msg, err := mime.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("messaggio inviato ma non memorizzabile: %w", err)
+		log.Printf("send: messaggio inviato ma non memorizzabile: %v", err)
+		return map[string]any{"sent": true}, nil
 	}
 	msg.FolderID = sentFolderID
 	msg.AccountID = target.ID
@@ -1573,11 +1576,12 @@ func opSend(_ context.Context, app *App, params json.RawMessage) (any, error) {
 		msg.ProviderMessageID = sentUID
 		resolver := thread.NewResolver(app.DB)
 		msg.ThreadID, err = resolver.Resolve(target.ID, sentFolderID, &msg)
-		if err != nil {
-			return nil, fmt.Errorf("resolve thread: %w", err)
+		if err == nil {
+			err = app.Messages.UpsertBatch([]domain.Message{msg})
 		}
-		if err := app.Messages.UpsertBatch([]domain.Message{msg}); err != nil {
-			return nil, fmt.Errorf("persist sent: %w", err)
+		if err != nil {
+			log.Printf("send: copia locale non salvata: %v", err)
+			return map[string]any{"sent": true}, nil
 		}
 		_ = app.Accounts.RefreshFolderCounters(sentFolderID)
 	}
