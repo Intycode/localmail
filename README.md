@@ -91,7 +91,7 @@ Passwords and keys go in the operating system keychain and nowhere else.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) ≥ 1.1 and Node.js ≥ 22.12
+- [Bun](https://bun.sh) ≥ 1.4 and Node.js ≥ 26
 - [Go](https://go.dev) ≥ 1.27
 - [Rust](https://rustup.rs) (stable) and the
   [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS

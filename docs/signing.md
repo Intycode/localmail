@@ -1,8 +1,9 @@
 # Firma e distribuzione (fase 5)
 
-Mail si distribuisce come **download manuale firmato**: niente auto-update,
-niente canali proprietari. Il workflow `.github/workflows/release.yml`
-compila i bundle per macOS, Windows e Linux a ogni tag `v*`.
+LocalMail si distribuisce tramite GitHub Releases, con **auto-update firmato**
+(plugin updater di Tauri). Le build si fanno in locale con `scripts/release.ts`
+(macOS sul Mac, Windows sulla macchina con il token USB): la procedura
+completa è in `CLAUDE.md` → "Rilasci".
 
 ## macOS (codesign + notarization)
 
@@ -45,6 +46,9 @@ repository firmati (apt/rpm + GPG) restano fuori scope.
 ## Distribuzione
 
 - I bundle firmati vengono allegati alla GitHub Release del tag.
-- Niente auto-update: il sito/README indica di scaricare l'ultima release.
+- Auto-update: all'avvio l'app legge
+  `releases/latest/download/latest.json`, verifica la firma minisign
+  (chiave pubblica in `tauri.conf.json → plugins.updater.pubkey`) e propone
+  l'installazione. Solo le release pubblicate (non draft) sono "latest".
 - Verifica consigliata agli utenti: confrontare lo SHA-256 dell'artefatto
   con quello pubblicato nella release.

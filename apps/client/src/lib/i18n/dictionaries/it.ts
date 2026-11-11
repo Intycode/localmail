@@ -349,6 +349,10 @@ export const it: Record<string, string> = {
   // --- impostazioni ---
   "settings.title": "Impostazioni",
   "settings.version": "LocalMail v{version}",
+  "updater.title": "Aggiornamento disponibile",
+  "updater.prompt": "È disponibile LocalMail v{version}. Installarlo ora? L'app verrà riavviata.",
+  "updater.install": "Installa e riavvia",
+  "updater.later": "Più tardi",
   "settings.sections": "Sezioni delle impostazioni",
   "settings.general": "Generale",
   "settings.compact": "Lista compatta",

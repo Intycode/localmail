@@ -6,6 +6,7 @@ import { navigate } from "@/lib/router"
 import { keyboardEnabled } from "@/lib/settings"
 import { useT, watchLocale } from "@/lib/i18n"
 import { maybeRunAutoBackup } from "@/lib/autoBackup"
+import { maybeCheckForUpdate } from "@/lib/updater"
 import { watchThemeMode } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
@@ -48,6 +49,9 @@ export function AppShell({
   // and forget, silent on failure (retried on the next start)
   React.useEffect(() => {
     void maybeRunAutoBackup()
+  }, [])
+  React.useEffect(() => {
+    void maybeCheckForUpdate()
   }, [])
 
   return (
