@@ -2,6 +2,8 @@ package imap
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"sync"
@@ -26,7 +28,6 @@ func Dial(cfg Config, password string) (Session, error) {
 	cs := &clientSession{cfg: cfg}
 	opts := &imapclient.Options{
 		TLSConfig: TLSConfig(cfg),
-		Dialer:    dialer(),
 		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
 			Mailbox: func(data *imapclient.UnilateralDataMailbox) {
 				if data.NumMessages == nil {
@@ -46,27 +47,39 @@ func Dial(cfg Config, password string) (Session, error) {
 		},
 	}
 
+	raw, err := dialer().Dial("tcp", Address(cfg))
+	if err != nil {
+		return nil, fmt.Errorf("connessione a %s non riuscita: %v", cfg.Host, err)
+	}
+	dc := &deadlineConn{Conn: raw}
 	var c *imapclient.Client
-	var err error
 	switch cfg.Security {
 	case SecurityTLS:
-		c, err = imapclient.DialTLS(Address(cfg), opts)
+		// same as imapclient.DialTLS, but over our deadline-aware socket and
+		// with the handshake done here so a stalled server fails fast
+		tlsCfg := TLSConfig(cfg)
+		tlsCfg.NextProtos = []string{"imap"}
+		tc := tls.Client(dc, tlsCfg)
+		ctx, cancel := context.WithTimeout(context.Background(), DialTimeout)
+		err = tc.HandshakeContext(ctx)
+		cancel()
 		if err != nil {
+			_ = raw.Close()
 			return nil, fmt.Errorf("connessione TLS a %s non riuscita: %v", cfg.Host, err)
 		}
+		c = imapclient.New(tc, opts)
 	case SecurityStartTLS:
-		c, err = imapclient.DialStartTLS(Address(cfg), opts)
+		c, err = imapclient.NewStartTLS(dc, opts) // closes dc on failure
 		if err != nil {
 			return nil, fmt.Errorf("STARTTLS con %s non riuscito: %v", cfg.Host, err)
 		}
 	case SecurityPlain:
-		c, err = imapclient.DialInsecure(Address(cfg), opts)
-		if err != nil {
-			return nil, fmt.Errorf("connessione a %s non riuscita: %v", cfg.Host, err)
-		}
+		c = imapclient.New(dc, opts)
 	default:
+		_ = raw.Close()
 		return nil, fmt.Errorf("modalità di sicurezza sconosciuta: %q", cfg.Security)
 	}
+	cs.dc = dc
 
 	if cfg.Auth == "oauth" {
 		// OAuth2 (Gmail): SASL XOAUTH2 with the access token as credential.
@@ -103,6 +116,7 @@ func (c xoauth2Client) Next(challenge []byte) ([]byte, error) {
 type clientSession struct {
 	cfg     Config
 	c       *imapclient.Client
+	dc      *deadlineConn // read-deadline control (IDLE)
 	current string // currently selected mailbox
 
 	mu     sync.Mutex
@@ -331,8 +345,10 @@ func (s *clientSession) Idle(mailbox string, notify chan<- struct{}) (func(), er
 	s.notify = notify
 	s.mu.Unlock()
 
+	s.dc.setIdle(idleReadTimeout)
 	cmd, err := s.c.Idle()
 	if err != nil {
+		s.dc.setIdle(0)
 		s.mu.Lock()
 		s.notify = nil
 		s.mu.Unlock()
@@ -343,6 +359,7 @@ func (s *clientSession) Idle(mailbox string, notify chan<- struct{}) (func(), er
 		once.Do(func() {
 			_ = cmd.Close() // sends DONE
 			_ = cmd.Wait()
+			s.dc.setIdle(0)
 			s.mu.Lock()
 			s.notify = nil
 			s.mu.Unlock()
