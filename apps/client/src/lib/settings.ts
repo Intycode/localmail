@@ -53,9 +53,9 @@ export function setSettingString(key: string, value: string): void {
   window.localStorage.setItem(PREFIX + key, value)
 }
 
-/** Auto-sync interval in minutes; 0 = only at startup (default). */
+/** Auto-sync interval in minutes (default 15); 0 = only at startup. */
 export function syncIntervalMinutes(): number {
-  return Number(getSettingString("sync-interval", "0")) || 0
+  return Number(getSettingString("sync-interval", "15")) || 0
 }
 
 export function setSyncIntervalMinutes(min: number): void {
