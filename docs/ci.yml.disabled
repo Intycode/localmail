@@ -47,7 +47,7 @@ jobs:
         run: go test ./...
         working-directory: backend
       - name: Build engine binary
-        run: go build -o ../src-tauri/binaries/mail-engine ./cmd/mail
+        run: go build -trimpath -o ../src-tauri/binaries/mail-engine ./cmd/mail
         working-directory: backend
 
   rust:

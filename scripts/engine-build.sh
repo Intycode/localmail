@@ -8,7 +8,7 @@ cd backend
 # Motore puro Go (sqlite wasm): niente CGO, cross-compila senza toolchain C.
 export CGO_ENABLED=0
 
-GOPATH="$PWD/.go-home" GOCACHE="$PWD/.go-home/build" go build -o ../src-tauri/binaries/mail-engine ./cmd/mail
+GOPATH="$PWD/.go-home" GOCACHE="$PWD/.go-home/build" go build -trimpath -o ../src-tauri/binaries/mail-engine ./cmd/mail
 
 HOST_TRIPLE=$(rustc -vV | sed -n 's/host: //p')
 cp ../src-tauri/binaries/mail-engine "../src-tauri/binaries/mail-engine-$HOST_TRIPLE"

@@ -16,7 +16,7 @@
     "format": "cd apps/client && bun run format",
     "check": "cd apps/client && bun run check",
     "start": "bun run engine:build && bun run tauri:dev",
-    "tauri:dev":"cd apps/client && bun run build && cd ../.. && tauri dev --config src-tauri/tauri.conf.json",
+    "tauri:dev": "cd apps/client && bun run build && cd ../.. && tauri dev --config src-tauri/tauri.conf.json",
     "tauri:build": "cd apps/client && bun run build && cd ../.. && tauri build --config src-tauri/tauri.conf.json && bash scripts/sign-windows.sh",
     "backend:test": "cd backend && go test ./...",
     "backend:vet": "cd backend && go vet ./...",
@@ -34,6 +34,6 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
-    "dompurify": "^3.4.14"
+    "dompurify": "^3.4.17"
   }
 }
