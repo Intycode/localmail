@@ -7,6 +7,9 @@
  *  - pre-paint by the inline bootstrap script in BaseLayout (no FOUC),
  *  - immediately from the Settings page via setThemeMode().
  * In "system" mode the OS preference is followed live.
+ *
+ * The accent color is a second, independent choice: `data-accent` on <html>
+ * swaps the --brand tokens in global.css (absent = "ocean", the app-icon blue).
  */
 
 export type ThemeMode = "system" | "light" | "dark"
@@ -25,6 +28,29 @@ export function getThemeMode(): ThemeMode {
 
 function systemPrefersDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches
+}
+
+export const ACCENTS = ["ocean", "cyan", "indigo", "violet", "rose", "graphite"] as const
+export type Accent = (typeof ACCENTS)[number]
+
+export const ACCENT_STORAGE_KEY = "mail.setting.accent"
+
+export function getAccent(): Accent {
+  if (typeof window === "undefined") return "ocean"
+  const stored = window.localStorage.getItem(ACCENT_STORAGE_KEY)
+  return (ACCENTS as readonly string[]).includes(stored ?? "") ? (stored as Accent) : "ocean"
+}
+
+export function applyAccent(accent: Accent): void {
+  if (accent === "ocean") delete document.documentElement.dataset.accent
+  else document.documentElement.dataset.accent = accent
+}
+
+/** Persist + apply an accent. */
+export function setAccent(accent: Accent): Accent {
+  window.localStorage.setItem(ACCENT_STORAGE_KEY, accent)
+  applyAccent(accent)
+  return accent
 }
 
 /** Apply a mode to the document (adds/removes `.dark`). */
@@ -50,10 +76,15 @@ export function watchThemeMode(): () => void {
   const onChange = () => {
     if (getThemeMode() === "system") applyThemeMode("system")
   }
+  // Another window changed a setting: re-apply both (applying is idempotent).
+  const onStorage = () => {
+    applyThemeMode(getThemeMode())
+    applyAccent(getAccent())
+  }
   media.addEventListener("change", onChange)
-  window.addEventListener("storage", onChange)
+  window.addEventListener("storage", onStorage)
   return () => {
     media.removeEventListener("change", onChange)
-    window.removeEventListener("storage", onChange)
+    window.removeEventListener("storage", onStorage)
   }
 }

@@ -420,11 +420,11 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
       <div className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
         <header className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-border px-5 py-3.5">
           <h1 className="text-base font-semibold">{title}</h1>
-          <p className="min-w-0 truncate text-xs text-muted-foreground">
-            {canSend
-              ? t("compose.description", { account: from || "—" })
-              : t("compose.needAccount")}
-          </p>
+          {!canSend && (
+            <p className="min-w-0 truncate text-xs text-muted-foreground">
+              {t("compose.needAccount")}
+            </p>
+          )}
         </header>
         <ComposeRow id="c-from" label={t("compose.from")}>
           {canSend ? (
@@ -493,7 +493,6 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
                 setCc(e.target.value)
                 markDirty()
               }}
-              placeholder={t("compose.ccPlaceholder")}
               list="contacts-suggestions"
               autoComplete="off"
               className="h-11 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
@@ -508,7 +507,6 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
               setSubject(e.target.value)
               markDirty()
             }}
-            placeholder={t("compose.subjectPlaceholder")}
             className="h-11 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent text-[15px] font-medium"
           />
         </ComposeRow>

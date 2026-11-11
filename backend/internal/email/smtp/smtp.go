@@ -319,18 +319,9 @@ func writeBase64(b *strings.Builder, data []byte) {
 	b.WriteString(enc)
 }
 
-// SendMessage composes and delivers the message over SMTP. It returns the
-// raw RFC 5322 bytes that were delivered (used for the APPEND into Sent).
-func SendMessage(cfg Config, password string, allowInsecure bool, from domain.Recipient, msg domain.ComposeMessage) ([]byte, error) {
-	if err := ValidateConfig(cfg, allowInsecure); err != nil {
-		return nil, err
-	}
-	recipients := envelopeRecipients(msg)
-	if len(recipients) == 0 {
-		return nil, fmt.Errorf("nessun destinatario valido")
-	}
-	raw := Compose(from, msg)
-
+// connect dials the server, upgrades to TLS when configured and
+// authenticates. The caller owns (and closes) the returned client.
+func connect(cfg Config, password, hello string) (*smtp.Client, error) {
 	var conn net.Conn
 	var err error
 	switch cfg.Security {
@@ -345,27 +336,28 @@ func SendMessage(cfg Config, password string, allowInsecure bool, from domain.Re
 	if err != nil {
 		return nil, fmt.Errorf("connessione SMTP a %s non riuscita: %v", Address(cfg), err)
 	}
-	defer conn.Close()
 	// one overall deadline for the whole session: a wedged server cannot
 	// hold the engine longer than IOTimeout
 	_ = conn.SetDeadline(time.Now().Add(IOTimeout))
 
 	c, err := smtp.NewClient(conn, cfg.Host)
 	if err != nil {
+		conn.Close()
 		return nil, fmt.Errorf("handshake SMTP con %s non riuscito: %v", cfg.Host, err)
 	}
-	defer c.Close()
+	ok := false
+	defer func() {
+		if !ok {
+			c.Close()
+		}
+	}()
 
-	hello := "localhost"
-	if i := strings.LastIndex(from.Email, "@"); i >= 0 && i < len(from.Email)-1 {
-		hello = from.Email[i+1:]
-	}
 	if err := c.Hello(hello); err != nil {
 		return nil, fmt.Errorf("EHLO non riuscito: %v", err)
 	}
 
 	if cfg.Security == SecurityStartTLS {
-		if ok, _ := c.Extension("STARTTLS"); !ok {
+		if has, _ := c.Extension("STARTTLS"); !has {
 			return nil, fmt.Errorf("il server non supporta STARTTLS")
 		}
 		if err := c.StartTLS(tlsConfig(cfg)); err != nil {
@@ -376,6 +368,48 @@ func SendMessage(cfg Config, password string, allowInsecure bool, from domain.Re
 	if err := authenticate(c, cfg, password); err != nil {
 		return nil, err
 	}
+	ok = true
+	return c, nil
+}
+
+// Verify logs into the outgoing server without sending anything, so a wrong
+// host, port or password surfaces when the account is added, not at the
+// first send.
+func Verify(cfg Config, password string, allowInsecure bool) error {
+	if err := ValidateConfig(cfg, allowInsecure); err != nil {
+		return err
+	}
+	c, err := connect(cfg, password, "localhost")
+	if err != nil {
+		return err
+	}
+	if err := c.Quit(); err != nil {
+		_ = c.Close() // login already succeeded: a failing QUIT is not an error
+	}
+	return nil
+}
+
+// SendMessage composes and delivers the message over SMTP. It returns the
+// raw RFC 5322 bytes that were delivered (used for the APPEND into Sent).
+func SendMessage(cfg Config, password string, allowInsecure bool, from domain.Recipient, msg domain.ComposeMessage) ([]byte, error) {
+	if err := ValidateConfig(cfg, allowInsecure); err != nil {
+		return nil, err
+	}
+	recipients := envelopeRecipients(msg)
+	if len(recipients) == 0 {
+		return nil, fmt.Errorf("nessun destinatario valido")
+	}
+	raw := Compose(from, msg)
+
+	hello := "localhost"
+	if i := strings.LastIndex(from.Email, "@"); i >= 0 && i < len(from.Email)-1 {
+		hello = from.Email[i+1:]
+	}
+	c, err := connect(cfg, password, hello)
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
 
 	if err := c.Mail(from.Email); err != nil {
 		return nil, fmt.Errorf("MAIL FROM rifiutato: %v", err)

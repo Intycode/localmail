@@ -1,6 +1,6 @@
 import * as React from "react"
 import type { SubmitEvent } from "react"
-import { Eye, EyeOff, TriangleAlert } from "lucide-react"
+import { Eye, EyeOff, Loader2, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 
 import { getMailService } from "@/services/serviceRegistry"
@@ -18,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 
 interface AccountConnectFormProps {
   /** id of the <form>: lets an external footer button submit it (`form=` attr). */
@@ -32,8 +31,8 @@ interface AccountConnectFormProps {
    */
   onConnected: (account: Account) => void
   /**
-   * Pinned footer, rendered after the scrollable body. Receives the
-   * submitting flag; the standard submit button is
+   * Pinned footer, rendered after the scrollable body. Receives the busy
+   * flag (manual submit or OAuth in flight); the standard submit button is
    * `<Button type="submit" form={formId}>`.
    */
   footer?: (submitting: boolean) => React.ReactNode
@@ -66,15 +65,11 @@ export function AccountConnectForm({
   const [submitError, setSubmitError] = React.useState("")
   const formRef = React.useRef<HTMLFormElement>(null)
 
-  /** Surfaces a failure: sticky toast + inline alert scrolled into view.
-   *  The alert renders at the top of the scrollable body, but the user is
-   *  typically scrolled to the password field when the error lands — without
-   *  the scroll the submit seems to silently do nothing. */
+  /** Surfaces a failure as the inline alert, scrolled into view: the user
+   *  is typically at the password field when the error lands. The form keeps
+   *  every value, so the fix is an edit + resubmit. */
   function fail(message: string): void {
     setSubmitError(message)
-    // sticky: the exact server error is the only diagnostic the user has
-    // (wrong host, auth failure, blocked port…) — dismissed by hand
-    toast.error(message, { duration: Infinity })
     formRef.current?.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -89,10 +84,6 @@ export function AccountConnectForm({
         if (at > 0 && email.indexOf(".", at) > at + 1) {
           if (!f.username.trim()) next.username = email
         }
-      }
-      if (key === "kind") {
-        // switching server type clears host-derived prefill mismatches
-        next.smtpAdvanced = false
       }
       // Standard ports follow the chosen security.
       if (key === "security") next.port = value === "tls" ? "993" : "143"
@@ -113,7 +104,6 @@ export function AccountConnectForm({
             host: p.imap.host,
             port: String(p.imap.port),
             security: p.imap.security,
-            smtpAdvanced: true,
             smtpHost: p.smtp.host,
             smtpPort: String(p.smtp.port),
             smtpSecurity: p.smtp.security,
@@ -163,16 +153,12 @@ export function AccountConnectForm({
             security: form.security,
             username: form.username.trim(),
           },
-          ...(form.smtpAdvanced && form.smtpHost.trim()
-            ? {
-                smtp: {
-                  host: form.smtpHost.trim(),
-                  port: Number(form.smtpPort) || 465,
-                  security: form.smtpSecurity,
-                  username: form.smtpUsername.trim() || form.username.trim(),
-                },
-              }
-            : {}),
+          smtp: {
+            host: form.smtpHost.trim(),
+            port: Number(form.smtpPort),
+            security: form.smtpSecurity,
+            username: form.smtpUsername.trim() || form.username.trim(),
+          },
           secret: form.password,
           allowInsecure: form.security === "plain",
         })
@@ -286,296 +272,177 @@ export function AccountConnectForm({
   }
 
   const id = (suffix: string): string => `${formId}-${suffix}`
+  const busy = submitting || googleStarting || microsoftStarting
 
   return (
     <>
-      <form ref={formRef} id={formId} className={bodyClassName} onSubmit={(e) => void submit(e)}>
-        <FieldGroup className="gap-4">
-          {submitError && (
-            <Alert variant="destructive" role="alert">
-              <TriangleAlert />
-              <AlertTitle>{t("connect.errorTitle")}</AlertTitle>
-              <AlertDescription className="break-words">{submitError}</AlertDescription>
-            </Alert>
-          )}
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-3.5 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">{t("connect.gmail")}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {t("connect.gmailDesc")}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={googleStarting || submitting}
-              onClick={() => void submitGoogle()}
-            >
-              {googleStarting ? t("connect.googleWait") : t("connect.googleCta")}
-            </Button>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {busy && (
+          <div
+            role="status"
+            className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/80 text-sm text-muted-foreground"
+          >
+            <Loader2 className="size-6 animate-spin" />
+            {googleStarting
+              ? t("connect.googleWait")
+              : microsoftStarting
+                ? t("connect.microsoftWait")
+                : t("accounts.connecting")}
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-3.5 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">{t("connect.microsoft")}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {t("connect.microsoftDesc")}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={microsoftStarting || googleStarting || submitting}
-              onClick={() => void submitMicrosoft()}
-            >
-              {microsoftStarting ? t("connect.microsoftWait") : t("connect.microsoftCta")}
-            </Button>
-          </div>
-          <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-4">
-            <p className="text-xs font-medium text-muted-foreground">{t("connect.orManual")}</p>
-            <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-              <Button
-                type="button"
-                size="sm"
-                variant={form.kind === "imap" ? "secondary" : "ghost"}
-                onClick={() => set("kind", "imap")}
-              >
-                IMAP
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={form.kind === "jmap" ? "secondary" : "ghost"}
-                onClick={() => set("kind", "jmap")}
-              >
-                JMAP
-              </Button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field data-invalid={errors.name ? true : undefined}>
-              <FieldLabel htmlFor={id("name")}>{t("connect.name")}</FieldLabel>
-              <Input
-                id={id("name")}
-                value={form.name}
-                onChange={(e) => set("name", e.target.value)}
-                placeholder="Personale"
-                autoComplete="off"
-              />
-              {errors.name && <FieldError>{errors.name}</FieldError>}
-            </Field>
-            <Field data-invalid={errors.email ? true : undefined}>
-              <FieldLabel htmlFor={id("email")}>{t("connect.email")}</FieldLabel>
-              <Input
-                id={id("email")}
-                type="email"
-                value={form.email}
-                onChange={(e) => set("email", e.target.value)}
-                placeholder="luca@esempio.it"
-                autoComplete="off"
-              />
-              {errors.email && <FieldError>{errors.email}</FieldError>}
-            </Field>
-          </div>
-
-          {form.kind === "jmap" ? (
-            <p className="mt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t("connect.jmapServer")}
-            </p>
-          ) : (
-            <p className="mt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t("connect.imapServer")}
-            </p>
-          )}
-
-          {form.kind === "imap" && (
-            <Field>
-              <FieldLabel htmlFor={id("preset")}>{t("connect.preset")}</FieldLabel>
-              <Select
-                value={form.preset || CUSTOM}
-                onValueChange={(v) => applyPreset(v === CUSTOM ? "" : v)}
-              >
-                <SelectTrigger id={id("preset")} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={CUSTOM}>{t("connect.presetCustom")}</SelectItem>
-                  {PRESETS.map((p) => (
-                    <SelectItem key={p.key} value={p.key}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>{t("connect.presetHint")}</FieldDescription>
-            </Field>
-          )}
-
-          <div className="grid grid-cols-3 gap-3">
-            <Field
-              className={form.kind === "jmap" ? "col-span-3" : "col-span-2"}
-              data-invalid={errors.host ? true : undefined}
-            >
-              <FieldLabel htmlFor={id("host")}>
-                {form.kind === "jmap" ? t("connect.sessionUrl") : t("connect.server")}
-              </FieldLabel>
-              <Input
-                id={id("host")}
-                value={form.host}
-                onChange={(e) => setForm((f) => ({ ...f, host: e.target.value, preset: "" }))}
-                placeholder={
-                  form.kind === "jmap" ? "https://api.fastmail.com/jmap/session" : "imap.esempio.it"
-                }
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {errors.host && <FieldError>{errors.host}</FieldError>}
-            </Field>
-            {form.kind === "imap" && (
-              <Field data-invalid={errors.port ? true : undefined}>
-                <FieldLabel htmlFor={id("port")}>{t("connect.port")}</FieldLabel>
-                <Input
-                  id={id("port")}
-                  inputMode="numeric"
-                  value={form.port}
-                  onChange={(e) => set("port", e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder="993"
-                />
-                {errors.port && <FieldError>{errors.port}</FieldError>}
-              </Field>
+        )}
+        <form
+          ref={formRef}
+          id={formId}
+          inert={busy}
+          className={bodyClassName}
+          onSubmit={(e) => void submit(e)}
+        >
+          <FieldGroup className="gap-4">
+            {submitError && (
+              <Alert variant="destructive" role="alert">
+                <TriangleAlert />
+                <AlertTitle>{t("connect.errorTitle")}</AlertTitle>
+                <AlertDescription className="break-words">{submitError}</AlertDescription>
+              </Alert>
             )}
-          </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={googleStarting || submitting}
+                onClick={() => void submitGoogle()}
+              >
+                {googleStarting ? t("connect.googleWait") : t("connect.googleCta")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={microsoftStarting || googleStarting || submitting}
+                onClick={() => void submitMicrosoft()}
+              >
+                {microsoftStarting ? t("connect.microsoftWait") : t("connect.microsoftCta")}
+              </Button>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-4">
+              <p className="text-xs font-medium text-muted-foreground">{t("connect.orManual")}</p>
+              {/* JMAP hidden for now: restore the IMAP/JMAP toggle (set("kind", "jmap")) to re-enable. */}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field data-invalid={errors.name ? true : undefined}>
+                <FieldLabel htmlFor={id("name")}>{t("connect.name")}</FieldLabel>
+                <Input
+                  id={id("name")}
+                  value={form.name}
+                  onChange={(e) => set("name", e.target.value)}
+                  placeholder="Personale"
+                  autoComplete="off"
+                />
+                {errors.name && <FieldError>{errors.name}</FieldError>}
+              </Field>
+              <Field data-invalid={errors.email ? true : undefined}>
+                <FieldLabel htmlFor={id("email")}>{t("connect.email")}</FieldLabel>
+                <Input
+                  id={id("email")}
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set("email", e.target.value)}
+                  placeholder="luca@esempio.it"
+                  autoComplete="off"
+                />
+                {errors.email && <FieldError>{errors.email}</FieldError>}
+              </Field>
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {form.kind === "jmap" ? (
+              <p className="mt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                {t("connect.jmapServer")}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                {t("connect.imapServer")}
+              </p>
+            )}
+
             {form.kind === "imap" && (
-              <Field data-invalid={errors.security ? true : undefined}>
-                <FieldLabel htmlFor={id("security")}>{t("connect.security")}</FieldLabel>
+              <Field>
+                <FieldLabel htmlFor={id("preset")}>{t("connect.preset")}</FieldLabel>
                 <Select
-                  value={form.security}
-                  onValueChange={(v) => set("security", v as ImapConfig["security"])}
+                  value={form.preset || CUSTOM}
+                  onValueChange={(v) => applyPreset(v === CUSTOM ? "" : v)}
                 >
-                  <SelectTrigger id={id("security")} className="w-full">
+                  <SelectTrigger id={id("preset")} className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="tls">{t("connect.tls")}</SelectItem>
-                    <SelectItem value="starttls">{t("connect.starttls")}</SelectItem>
-                    <SelectItem value="plain">{t("connect.plain")}</SelectItem>
+                    <SelectItem value={CUSTOM}>{t("connect.presetCustom")}</SelectItem>
+                    {PRESETS.map((p) => (
+                      <SelectItem key={p.key} value={p.key}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                {form.security === "plain" && (
-                  <FieldDescription className="text-destructive">
-                    {t("connect.plainWarning")}
-                  </FieldDescription>
-                )}
               </Field>
             )}
-            <Field data-invalid={errors.username ? true : undefined}>
-              <FieldLabel htmlFor={id("username")}>{t("connect.username")}</FieldLabel>
-              <Input
-                id={id("username")}
-                value={form.username}
-                onChange={(e) => set("username", e.target.value)}
-                placeholder="luca@esempio.it"
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {errors.username && <FieldError>{errors.username}</FieldError>}
-            </Field>
-          </div>
 
-          <Field data-invalid={errors.password ? true : undefined}>
-            <FieldLabel htmlFor={id("password")}>
-              {form.kind === "jmap" ? t("connect.token") : t("connect.password")}
-            </FieldLabel>
-            <div className="relative">
-              <Input
-                id={id("password")}
-                type={showPassword ? "text" : "password"}
-                value={form.password}
-                onChange={(e) => set("password", e.target.value)}
-                autoComplete="off"
-                className="pr-9"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="absolute top-1/2 right-1.5 -translate-y-1/2"
-                aria-label={showPassword ? t("connect.hidePassword") : t("connect.showPassword")}
-                title={showPassword ? t("connect.hidePassword") : t("connect.showPassword")}
-                onClick={() => setShowPassword((v) => !v)}
+            <div className="grid grid-cols-3 gap-3">
+              <Field
+                className={form.kind === "jmap" ? "col-span-3" : "col-span-2"}
+                data-invalid={errors.host ? true : undefined}
               >
-                {showPassword ? <EyeOff /> : <Eye />}
-              </Button>
-            </div>
-            <FieldDescription>{t("connect.passwordKeychain")}</FieldDescription>
-            {errors.password && <FieldError>{errors.password}</FieldError>}
-          </Field>
-
-          {form.kind === "imap" && (
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-3.5 py-3">
-              <div className="min-w-0">
-                <FieldLabel htmlFor={id("smtp-advanced")} className="font-normal">
-                  {t("connect.smtpCustom")}
+                <FieldLabel htmlFor={id("host")}>
+                  {form.kind === "jmap" ? t("connect.sessionUrl") : t("connect.server")}
                 </FieldLabel>
-                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                  {form.smtpAdvanced ? t("connect.smtpManual") : t("connect.smtpAuto")}
-                </p>
-              </div>
-              <Switch
-                id={id("smtp-advanced")}
-                checked={form.smtpAdvanced}
-                onCheckedChange={(v) => {
-                  if (v) {
-                    setForm((f) => ({ ...f, smtpAdvanced: true, ...smtpDefaults(f) }))
-                  } else {
-                    setForm((f) => ({
-                      ...f,
-                      smtpAdvanced: false,
-                      smtpHost: "",
-                      smtpPort: "465",
-                      smtpSecurity: "tls",
-                      smtpUsername: "",
-                    }))
+                <Input
+                  id={id("host")}
+                  value={form.host}
+                  onChange={(e) =>
+                    setForm((f) => {
+                      const host = e.target.value
+                      // SMTP host follows the IMAP one until the user edits it
+                      const follows = !f.smtpHost || f.smtpHost === derivedSmtpHost(f.host)
+                      return {
+                        ...f,
+                        host,
+                        preset: "",
+                        smtpHost: follows ? derivedSmtpHost(host) : f.smtpHost,
+                      }
+                    })
                   }
-                }}
-              />
-            </div>
-          )}
-
-          {form.kind === "imap" && form.smtpAdvanced && (
-            <div className="mt-1 flex flex-col gap-4">
-              <div className="grid grid-cols-3 gap-3">
-                <Field className="col-span-2">
-                  <FieldLabel htmlFor={id("smtp-host")}>{t("connect.smtpServer")}</FieldLabel>
+                  placeholder={
+                    form.kind === "jmap"
+                      ? "https://api.fastmail.com/jmap/session"
+                      : "imap.esempio.it"
+                  }
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                {errors.host && <FieldError>{errors.host}</FieldError>}
+              </Field>
+              {form.kind === "imap" && (
+                <Field data-invalid={errors.port ? true : undefined}>
+                  <FieldLabel htmlFor={id("port")}>{t("connect.port")}</FieldLabel>
                   <Input
-                    id={id("smtp-host")}
-                    value={form.smtpHost}
-                    onChange={(e) => set("smtpHost", e.target.value)}
-                    placeholder="smtp.esempio.it"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor={id("smtp-port")}>{t("connect.port")}</FieldLabel>
-                  <Input
-                    id={id("smtp-port")}
+                    id={id("port")}
                     inputMode="numeric"
-                    value={form.smtpPort}
-                    onChange={(e) => set("smtpPort", e.target.value.replace(/[^0-9]/g, ""))}
-                    placeholder="465"
+                    value={form.port}
+                    onChange={(e) => set("port", e.target.value.replace(/[^0-9]/g, ""))}
+                    placeholder="993"
                   />
+                  {errors.port && <FieldError>{errors.port}</FieldError>}
                 </Field>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor={id("smtp-security")}>{t("connect.smtpSecurity")}</FieldLabel>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {form.kind === "imap" && (
+                <Field data-invalid={errors.security ? true : undefined}>
+                  <FieldLabel htmlFor={id("security")}>{t("connect.security")}</FieldLabel>
                   <Select
-                    value={form.smtpSecurity}
-                    onValueChange={(v) => set("smtpSecurity", v as SmtpConfig["security"])}
+                    value={form.security}
+                    onValueChange={(v) => set("security", v as ImapConfig["security"])}
                   >
-                    <SelectTrigger id={id("smtp-security")} className="w-full">
+                    <SelectTrigger id={id("security")} className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -584,25 +451,127 @@ export function AccountConnectForm({
                       <SelectItem value="plain">{t("connect.plain")}</SelectItem>
                     </SelectContent>
                   </Select>
+                  {form.security === "plain" && (
+                    <FieldDescription className="text-destructive">
+                      {t("connect.plainWarning")}
+                    </FieldDescription>
+                  )}
                 </Field>
-                <Field>
-                  <FieldLabel htmlFor={id("smtp-username")}>{t("connect.smtpUsername")}</FieldLabel>
-                  <Input
-                    id={id("smtp-username")}
-                    value={form.smtpUsername}
-                    onChange={(e) => set("smtpUsername", e.target.value)}
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                </Field>
-              </div>
-              <FieldDescription>{t("connect.smtpPasswordNote")}</FieldDescription>
+              )}
+              <Field data-invalid={errors.username ? true : undefined}>
+                <FieldLabel htmlFor={id("username")}>{t("connect.username")}</FieldLabel>
+                <Input
+                  id={id("username")}
+                  value={form.username}
+                  onChange={(e) => set("username", e.target.value)}
+                  placeholder="luca@esempio.it"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                {errors.username && <FieldError>{errors.username}</FieldError>}
+              </Field>
             </div>
-          )}
-          {form.kind === "jmap" && <FieldDescription>{t("connect.jmapNote")}</FieldDescription>}
-        </FieldGroup>
-      </form>
-      {footer?.(submitting)}
+
+            <Field data-invalid={errors.password ? true : undefined}>
+              <FieldLabel htmlFor={id("password")}>
+                {form.kind === "jmap" ? t("connect.token") : t("connect.password")}
+              </FieldLabel>
+              <div className="relative">
+                <Input
+                  id={id("password")}
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) => set("password", e.target.value)}
+                  autoComplete="off"
+                  className="pr-9"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute top-1/2 right-1.5 -translate-y-1/2"
+                  aria-label={showPassword ? t("connect.hidePassword") : t("connect.showPassword")}
+                  title={showPassword ? t("connect.hidePassword") : t("connect.showPassword")}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? <EyeOff /> : <Eye />}
+                </Button>
+              </div>
+              <FieldDescription>{t("connect.passwordKeychain")}</FieldDescription>
+              {errors.password && <FieldError>{errors.password}</FieldError>}
+            </Field>
+
+            {form.kind === "imap" && (
+              <div className="flex flex-col gap-4">
+                <p className="mt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t("connect.smtpSection")}
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field className="col-span-2" data-invalid={errors.smtpHost ? true : undefined}>
+                    <FieldLabel htmlFor={id("smtp-host")}>{t("connect.smtpServer")}</FieldLabel>
+                    <Input
+                      id={id("smtp-host")}
+                      value={form.smtpHost}
+                      onChange={(e) => set("smtpHost", e.target.value)}
+                      placeholder="smtp.esempio.it"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    {errors.smtpHost && <FieldError>{errors.smtpHost}</FieldError>}
+                  </Field>
+                  <Field data-invalid={errors.smtpPort ? true : undefined}>
+                    <FieldLabel htmlFor={id("smtp-port")}>{t("connect.port")}</FieldLabel>
+                    <Input
+                      id={id("smtp-port")}
+                      inputMode="numeric"
+                      value={form.smtpPort}
+                      onChange={(e) => set("smtpPort", e.target.value.replace(/[^0-9]/g, ""))}
+                      placeholder="465"
+                    />
+                    {errors.smtpPort && <FieldError>{errors.smtpPort}</FieldError>}
+                  </Field>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor={id("smtp-security")}>
+                      {t("connect.smtpSecurity")}
+                    </FieldLabel>
+                    <Select
+                      value={form.smtpSecurity}
+                      onValueChange={(v) => set("smtpSecurity", v as SmtpConfig["security"])}
+                    >
+                      <SelectTrigger id={id("smtp-security")} className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tls">{t("connect.tls")}</SelectItem>
+                        <SelectItem value="starttls">{t("connect.starttls")}</SelectItem>
+                        <SelectItem value="plain">{t("connect.plain")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor={id("smtp-username")}>
+                      {t("connect.smtpUsername")}
+                    </FieldLabel>
+                    <Input
+                      id={id("smtp-username")}
+                      value={form.smtpUsername}
+                      onChange={(e) => set("smtpUsername", e.target.value)}
+                      placeholder={form.username}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </Field>
+                </div>
+                <FieldDescription>{t("connect.smtpPasswordNote")}</FieldDescription>
+              </div>
+            )}
+            {form.kind === "jmap" && <FieldDescription>{t("connect.jmapNote")}</FieldDescription>}
+          </FieldGroup>
+        </form>
+      </div>
+      {footer?.(busy)}
     </>
   )
 }
@@ -633,8 +602,7 @@ interface FormState {
   security: ImapConfig["security"]
   username: string
   password: string
-  // outgoing SMTP (optional): empty fields are derived by the engine from IMAP
-  smtpAdvanced: boolean
+  // outgoing SMTP: host prefilled from the IMAP one, username defaults to it
   smtpHost: string
   smtpPort: string
   smtpSecurity: SmtpConfig["security"]
@@ -651,7 +619,6 @@ const emptyForm: FormState = {
   security: "tls",
   username: "",
   password: "",
-  smtpAdvanced: false,
   smtpHost: "",
   smtpPort: "465",
   smtpSecurity: "tls",
@@ -732,17 +699,12 @@ const PRESETS: {
   },
 ]
 
-/** Derives the precompiled SMTP defaults from the IMAP form values. */
-function smtpDefaults(f: FormState): Partial<FormState> {
-  const host = f.host.trim()
-  // same rule as the engine's smtp.DefaultFor: posteo.de stays posteo.de, never smtp.de
+/** smtp.<domain> for an IMAP host — same rule as the engine's
+ *  smtp.DefaultFor: posteo.de stays posteo.de, never smtp.de. */
+function derivedSmtpHost(imapHost: string): string {
+  const host = imapHost.trim()
   const rest = host.slice(host.indexOf(".") + 1)
-  const derived = host.indexOf(".") > 0 && rest.includes(".") ? `smtp.${rest}` : host
-  return {
-    smtpHost: f.smtpHost || derived,
-    smtpPort: f.smtpPort || "465",
-    smtpUsername: f.smtpUsername || f.username,
-  }
+  return host.indexOf(".") > 0 && rest.includes(".") ? `smtp.${rest}` : host
 }
 
 function validate(form: FormState): Partial<Record<keyof FormState, string>> {
@@ -761,6 +723,10 @@ function validate(form: FormState): Partial<Record<keyof FormState, string>> {
     const port = Number(form.port)
     if (!form.port || !Number.isInteger(port) || port < 1 || port > 65535)
       errors.port = t("connect.errPort")
+    if (!form.smtpHost.trim()) errors.smtpHost = t("connect.errSmtpHost")
+    const smtpPort = Number(form.smtpPort)
+    if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535)
+      errors.smtpPort = t("connect.errPort")
   }
   if (!form.username.trim()) errors.username = t("connect.errUsername")
   if (!form.password)

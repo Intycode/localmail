@@ -1,13 +1,13 @@
 import * as React from "react"
 import {
   Archive,
+  Check,
   ChevronsUpDown,
   Clock,
   FilePenLine,
   Folder as FolderIcon,
   Import,
   Inbox,
-  Mail,
   Mails,
   PenLine,
   Search,
@@ -22,9 +22,10 @@ import { cn } from "@/lib/utils"
 import { formatFolderName } from "@/lib/format"
 import { routerStore } from "@/lib/router"
 import { useT } from "@/lib/i18n"
+import { switchAccount } from "@/lib/useAccounts"
 import type { Account, Folder } from "@/types"
 import { AccountAvatar } from "@/components/app/AccountAvatar"
-import { Badge } from "@/components/ui/badge"
+import { AppLogo } from "@/components/app/AppLogo"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -213,9 +214,7 @@ function AccountSwitcher({ accounts, active }: { accounts: Account[]; active?: A
     return (
       <SidebarMenuButton size="lg" asChild>
         <a href="/accounts">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Mail className="size-4" />
-          </span>
+          <AppLogo className="size-8" />
           <div className="grid min-w-0 flex-1 leading-tight">
             <span className="truncate font-semibold">Mail</span>
             <span className="truncate text-xs text-muted-foreground">{t("nav.noAccountYet")}</span>
@@ -247,12 +246,14 @@ function AccountSwitcher({ accounts, active }: { accounts: Account[]; active?: A
       >
         <DropdownMenuLabel>{t("nav.accounts")}</DropdownMenuLabel>
         {accounts.map((a) => (
-          <DropdownMenuItem key={a.id} asChild>
-            <a href="/accounts" className={cn(a.isActive && "font-semibold")}>
-              <AccountAvatar accountId={a.id} name={a.name} size="sm" />
-              <span className="min-w-0 flex-1 truncate">{a.email}</span>
-              {a.isActive && <Badge variant="secondary">{t("nav.activeBadge")}</Badge>}
-            </a>
+          <DropdownMenuItem
+            key={a.id}
+            className={cn(a.isActive && "font-semibold")}
+            onSelect={() => void switchAccount(a.id).catch(() => undefined)}
+          >
+            <AccountAvatar accountId={a.id} name={a.name} size="sm" />
+            <span className="min-w-0 flex-1 truncate">{a.email}</span>
+            {a.isActive && <Check className="size-4" aria-label={t("nav.activeBadge")} />}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />

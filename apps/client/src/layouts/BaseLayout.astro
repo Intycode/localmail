@@ -66,7 +66,7 @@ const title = it[titleKey] ?? titleKey
         const titleKey = document.documentElement.dataset.pageTitle
         if (titleKey && titles[locale][titleKey]) document.title = titles[locale][titleKey]
       })()
-      // Theme bootstrap: apply the persisted mode (System/Light/Dark) before
+      // Theme bootstrap: apply the persisted mode (System/Light/Dark) and accent before
       // first paint so there is no flash. Mirrors lib/theme.ts.
       ;(() => {
         const stored = localStorage.getItem("mail.setting.theme") ?? "system"
@@ -75,6 +75,8 @@ const title = it[titleKey] ?? titleKey
           (stored !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)
         document.documentElement.classList.toggle("dark", dark)
         document.documentElement.style.colorScheme = dark ? "dark" : "light"
+        const accent = localStorage.getItem("mail.setting.accent")
+        if (accent && accent !== "ocean") document.documentElement.dataset.accent = accent
         // Tauri window chrome: mark the runtime and the OS before first paint
         // so the custom title bar styles apply with no flash (transparent
         // body, macOS corner radius). Mirrors lib/platform.ts.

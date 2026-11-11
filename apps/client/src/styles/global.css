@@ -4,6 +4,9 @@
  * Design principles: fast, typography-first, few elements, clean layout,
  * dark-mode-ready, responsive, keyboard friendly.
  *
+ * Palette: see the "Sky" design-system block below (icon-derived, accent
+ * selectable from Settings).
+ *
  * Conventions:
  *  - shadcn semantic tokens (--background, --primary, --sidebar-*, …) are
  *    declared on :root and re-declared on .dark. Dark mode is class-based:
@@ -69,77 +72,115 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Light — the app's palette: white bg, warm-grey chrome, calm blue accent. */
+/*
+ * Design system "Sky" — derived from the app icon (blue #2a74ee → cyan
+ * #00c0de, white envelope). Cool, blue-tinted neutrals; one brand color.
+ *
+ * Brand: --brand (light) / --brand-dark (dark) are the only per-accent
+ * values. primary, ring, sidebar-primary and the tinted hover surfaces
+ * (accent, sidebar-accent, selection) all derive from them, so switching
+ * accent (Settings → Appearance, `data-accent` on <html>, lib/theme.ts)
+ * recolors the whole UI. Every brand pair is ≥ 4.5:1 against its text and
+ * background (WCAG AA). The selectors are not :root-only so a Settings
+ * swatch can carry its own data-accent to preview the color.
+ */
+:root,
+[data-accent="ocean"] {
+  --brand: #1769d4; /* ocean — the icon blue, default */
+  --brand-dark: #55a8f6;
+}
+[data-accent="cyan"] {
+  --brand: #0b7a95;
+  --brand-dark: #2cc5e2;
+}
+[data-accent="indigo"] {
+  --brand: #4f46e5;
+  --brand-dark: #8f90f9;
+}
+[data-accent="violet"] {
+  --brand: #7c3aed;
+  --brand-dark: #ac8ffa;
+}
+[data-accent="rose"] {
+  --brand: #c92a64;
+  --brand-dark: #f47aa6;
+}
+[data-accent="graphite"] {
+  --brand: #3b4554;
+  --brand-dark: #c3cddb;
+}
+
+/* Light — white canvas, cool chrome, brand-tinted hovers. */
 :root {
-  --radius: 0.375rem;
+  --radius: 0.5rem;
   /* Slim custom title bar (TitleBar.tsx); the sidebar and the frame offset by it. */
   --titlebar-h: 2.25rem;
   --background: #ffffff;
-  --foreground: #1a1a18;
+  --foreground: #0f1a2a;
   --card: #ffffff;
-  --card-foreground: #1a1a18;
+  --card-foreground: #0f1a2a;
   --popover: #ffffff;
-  --popover-foreground: #1a1a18;
-  --primary: #2b6cb0;
+  --popover-foreground: #0f1a2a;
+  --primary: var(--brand);
   --primary-foreground: #ffffff;
-  --secondary: #f6f6f5;
-  --secondary-foreground: #1a1a18;
-  --muted: #f6f6f5;
-  --muted-foreground: #6b6b66;
-  --accent: #ececeb;
-  --accent-foreground: #1a1a18;
-  --destructive: #b03a2e;
-  --border: #e3e3df;
-  --input: #e3e3df;
-  --ring: #2b6cb0;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: #f6f6f5;
-  --sidebar-foreground: #1a1a18;
-  --sidebar-primary: #2b6cb0;
+  --secondary: #f2f5f9;
+  --secondary-foreground: #0f1a2a;
+  --muted: #f2f5f9;
+  --muted-foreground: #5a6577;
+  --accent: color-mix(in oklch, var(--brand) 8%, #f6f8fb);
+  --accent-foreground: #0f1a2a;
+  --destructive: #c4382b;
+  --border: #e0e6ee;
+  --input: #d5dde8;
+  --ring: var(--brand);
+  --chart-1: #1769d4;
+  --chart-2: #0b9fc4;
+  --chart-3: #4f46e5;
+  --chart-4: #14a37f;
+  --chart-5: #d08a12;
+  --sidebar: #f4f7fb;
+  --sidebar-foreground: #0f1a2a;
+  --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ececeb;
-  --sidebar-accent-foreground: #1a1a18;
-  --sidebar-border: #e3e3df;
-  --sidebar-ring: #2b6cb0;
+  --sidebar-accent: color-mix(in oklch, var(--brand) 11%, #f4f7fb);
+  --sidebar-accent-foreground: #0f1a2a;
+  --sidebar-border: #e0e6ee;
+  --sidebar-ring: var(--brand);
 }
 
-/* Dark — near-black surfaces, softened blue accent. */
+/* Dark — deep navy surfaces, brighter brand. */
 .dark {
-  --background: #17181a;
-  --foreground: #ececeb;
-  --card: #1d1e21;
-  --card-foreground: #ececeb;
-  --popover: #1d1e21;
-  --popover-foreground: #ececeb;
-  --primary: #6f9fd4;
-  --primary-foreground: #17181a;
-  --secondary: #202225;
-  --secondary-foreground: #ececeb;
-  --muted: #202225;
-  --muted-foreground: #9a9a95;
-  --accent: #202225;
-  --accent-foreground: #ececeb;
-  --destructive: #d97a6f;
-  --border: #2b2c30;
-  --input: #2b2c30;
-  --ring: #6f9fd4;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: #101113;
-  --sidebar-foreground: #ececeb;
-  --sidebar-primary: #6f9fd4;
-  --sidebar-primary-foreground: #17181a;
-  --sidebar-accent: #202225;
-  --sidebar-accent-foreground: #ececeb;
-  --sidebar-border: #2b2c30;
-  --sidebar-ring: #6f9fd4;
+  --background: #0d131b;
+  --foreground: #e6edf6;
+  --card: #121a24;
+  --card-foreground: #e6edf6;
+  --popover: #141d28;
+  --popover-foreground: #e6edf6;
+  --primary: var(--brand-dark);
+  --primary-foreground: #07101a;
+  --secondary: #17202b;
+  --secondary-foreground: #e6edf6;
+  --muted: #17202b;
+  --muted-foreground: #8d9aab;
+  --accent: color-mix(in oklch, var(--brand-dark) 12%, #141c26);
+  --accent-foreground: #e6edf6;
+  --destructive: #f07a70;
+  --border: #222e3d;
+  --input: #2a3748;
+  --ring: var(--brand-dark);
+  --chart-1: #55a8f6;
+  --chart-2: #2cc5e2;
+  --chart-3: #8f90f9;
+  --chart-4: #3fd1a5;
+  --chart-5: #f2b84b;
+  --sidebar: #0a0f16;
+  --sidebar-foreground: #e6edf6;
+  --sidebar-primary: var(--brand-dark);
+  --sidebar-primary-foreground: #07101a;
+  --sidebar-accent: color-mix(in oklch, var(--brand-dark) 14%, #111923);
+  --sidebar-accent-foreground: #e6edf6;
+  --sidebar-border: #1c2734;
+  --sidebar-ring: var(--brand-dark);
 }
 
 @layer base {

@@ -180,9 +180,11 @@ export function AISection(): React.JSX.Element {
               {available ? t("ai.connected") : t("ai.notDetected")}
             </Badge>
           </span>
-          <span className="text-[13px] text-muted-foreground">
-            {st?.error ? st.error : available ? t("ai.availableDesc") : t("ai.unavailableDesc")}
-          </span>
+          {(st?.error || !available) && (
+            <span className="text-[13px] text-muted-foreground">
+              {st?.error || t("ai.unavailableDesc")}
+            </span>
+          )}
         </span>
         {available && search && search.total > 0 && (
           <Button variant="outline" size="sm" onClick={() => void reindexAll()} disabled={indexing}>
@@ -265,7 +267,7 @@ export function AISection(): React.JSX.Element {
               chatModel.trim() !== st?.chatModel && void saveChatModel(chatModel.trim())
             }
             className="h-8 w-full sm:w-64"
-            placeholder="es. llama3.2:latest"
+            placeholder="llama3.2:latest"
             aria-label={t("ai.chatModel")}
           />
         )}

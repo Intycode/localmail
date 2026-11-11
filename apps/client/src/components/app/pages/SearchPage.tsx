@@ -9,7 +9,6 @@ import { isTauri, semanticSearchService } from "@/services/tauriMailService"
 import type { SearchResult } from "@/types"
 import { ThreadContextMenu } from "@/components/app/ThreadContextMenu"
 import { Badge } from "@/components/ui/badge"
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 
 const matchedOnKeys: Record<SearchResult["matchedOn"], string> = {
@@ -143,10 +142,10 @@ export function SearchPage() {
           )}
         </div>
 
-        {results === null ? (
-          <SearchHint>{t("search.hint")}</SearchHint>
-        ) : results.length === 0 ? (
-          <SearchHint>{t("search.noResults", { query: query.trim() })}</SearchHint>
+        {results === null ? null : results.length === 0 ? (
+          <p role="status" className="py-12 text-center text-sm text-muted-foreground">
+            {t("search.noResults", { query: query.trim() })}
+          </p>
         ) : (
           <div className="border-t border-border">
             {results.map((h) => (
@@ -188,23 +187,6 @@ export function SearchPage() {
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-function SearchHint({ children }: { children: React.ReactNode }) {
-  const t = useT()
-  return (
-    <div className="flex items-center justify-center py-12">
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Search />
-          </EmptyMedia>
-          <EmptyTitle>{t("search.title")}</EmptyTitle>
-          <EmptyDescription>{children}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
     </div>
   )
 }

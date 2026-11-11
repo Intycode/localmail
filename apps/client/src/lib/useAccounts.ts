@@ -1,7 +1,17 @@
 import * as React from "react"
 
 import type { Account } from "../types"
-import { accountStore } from "../stores/accountStore"
+import { accountStore, setActiveAccount } from "../stores/accountStore"
+import { getMailService } from "../services/serviceRegistry"
+import { navigate } from "./router"
+
+/** Makes `id` the active account (store + engine) and opens its inbox. */
+export async function switchAccount(id: string): Promise<void> {
+  setActiveAccount(id)
+  const svc = (await getMailService()) as { setActive?: (id: string) => Promise<void> }
+  await svc.setActive?.(id)
+  navigate("/")
+}
 
 /**
  * useAccounts — reactive accounts list backed by accountStore, seeded with

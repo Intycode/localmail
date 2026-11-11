@@ -1,7 +1,8 @@
 import * as React from "react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { Copy, Mail, Minus, Plus, Square, X } from "lucide-react"
+import { Copy, Minus, Plus, Square, X } from "lucide-react"
 
+import { AppLogo } from "@/components/app/AppLogo"
 import { detectOs, type DesktopOs } from "@/lib/platform"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -116,7 +117,7 @@ export function TitleBar() {
         data-tauri-drag-region
         className="flex items-center gap-1.5 px-2 [&_*]:pointer-events-none"
       >
-        <Mail className="size-3.5 text-muted-foreground" aria-hidden />
+        <AppLogo className="size-3.5" />
         <span className="text-xs font-medium text-foreground/80">Mail</span>
       </div>
 

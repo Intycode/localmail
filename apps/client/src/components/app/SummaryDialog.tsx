@@ -416,8 +416,6 @@ export function SummaryDialog({ thread, messages }: SummaryDialogProps): React.J
             </Button>
           </DialogFooter>
         )}
-
-        <p className="text-center text-[11px] text-muted-foreground/80">{t("summary.localNote")}</p>
       </DialogContent>
     </Dialog>
   )

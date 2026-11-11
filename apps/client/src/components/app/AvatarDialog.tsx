@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -64,10 +63,9 @@ export function AvatarDialog({ accountId, name, trigger }: AvatarDialogProps) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{t("avatar.title", { name })}</DialogTitle>
-          <DialogDescription>{t("avatar.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex items-center gap-3 px-0.5">
@@ -153,10 +151,10 @@ export function AvatarDialog({ accountId, name, trigger }: AvatarDialogProps) {
 
         <DialogFooter className="sm:justify-between">
           <Button variant="ghost" size="sm" onClick={() => resetAvatarPref(accountId)}>
-            Ripristina
+            {t("avatar.reset")}
           </Button>
           <Button size="sm" onClick={() => setOpen(false)}>
-            Fatto
+            {t("common.done")}
           </Button>
         </DialogFooter>
       </DialogContent>

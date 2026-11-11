@@ -1,18 +1,14 @@
 import * as React from "react"
 import {
-  BellRing,
-  Clock,
   DatabaseBackup,
   Filter,
   FolderOpen,
   KeyRound,
-  Keyboard,
   Sparkles,
   Monitor,
   Moon,
   Palette,
   Plus,
-  ShieldCheck,
   SlidersHorizontal,
   Sun,
   Trash2,
@@ -30,13 +26,20 @@ import {
   setSendUndoSeconds,
   setSetting,
 } from "@/lib/settings"
-import { getThemeMode, setThemeMode, type ThemeMode } from "@/lib/theme"
+import {
+  ACCENTS,
+  getAccent,
+  getThemeMode,
+  setAccent,
+  setThemeMode,
+  type Accent,
+  type ThemeMode,
+} from "@/lib/theme"
 import { dateLocale, getLocale, LOCALES, setLocale, useT, type Locale } from "@/lib/i18n"
 import { getMailService } from "@/services/serviceRegistry"
 import { isTauri, pgpService, pickPath } from "@/services/tauriMailService"
 import { formatFolderName } from "@/lib/format"
 import { AISection } from "./SettingsAI"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -55,7 +58,7 @@ import { PageBody, PageHeader } from "../PageHeader"
 interface ToggleDef {
   key: string
   labelKey: string
-  descKey: string
+  descKey?: string
   defaultValue: boolean
   hint?: React.ReactNode
 }
@@ -63,55 +66,26 @@ interface ToggleDef {
 /** Native names — a language picker should never be in the other language. */
 const LOCALE_LABELS: Record<Locale, string> = { it: "Italiano", en: "English" }
 
-const groups: {
-  titleKey: string
-  icon: React.ComponentType<{ className?: string }>
-  toggles: ToggleDef[]
-}[] = [
-  {
-    titleKey: "settings.general",
-    icon: SlidersHorizontal,
-    toggles: [
-      {
-        key: "sync-on-start",
-        labelKey: "settings.syncOnStart",
-        descKey: "settings.syncOnStartDesc",
-        defaultValue: true,
-      },
-      {
-        key: "compact",
-        labelKey: "settings.compact",
-        descKey: "settings.compactDesc",
-        defaultValue: false,
-      },
-    ],
-  },
-  {
-    titleKey: "settings.notifications",
-    icon: BellRing,
-    toggles: [
-      {
-        key: NOTIFICATIONS_KEY,
-        labelKey: "settings.systemNotifications",
-        descKey: "settings.systemNotificationsDesc",
-        defaultValue: true,
-      },
-    ],
-  },
-  {
-    titleKey: "settings.keyboard",
-    icon: Keyboard,
-    toggles: [
-      {
-        key: "keyboard",
-        labelKey: "settings.shortcuts",
-        descKey: "settings.shortcutsDesc",
-        defaultValue: true,
-        hint: <KeyboardHint />,
-      },
-    ],
-  },
-]
+const notificationsToggle: ToggleDef = {
+  key: NOTIFICATIONS_KEY,
+  labelKey: "settings.systemNotifications",
+  descKey: "settings.systemNotificationsDesc",
+  defaultValue: true,
+}
+
+const keyboardToggle: ToggleDef = {
+  key: "keyboard",
+  labelKey: "settings.shortcuts",
+  defaultValue: true,
+  hint: <KeyboardHint />,
+}
+
+const compactToggle: ToggleDef = {
+  key: "compact",
+  labelKey: "settings.compact",
+  descKey: "settings.compactDesc",
+  defaultValue: false,
+}
 
 /** Kbd hint for the shortcuts toggle (translated at render time). */
 function KeyboardHint(): React.JSX.Element {
@@ -135,17 +109,14 @@ const themeOptions: {
   { value: "dark", labelKey: "settings.themeDark", icon: Moon },
 ]
 
-/** SettingsPage — persisted toggles + the System/Light/Dark theme picker. */
 /** Section order for the side nav; must match the render order below. */
 const sectionKeys = [
-  ...groups.map((g) => g.titleKey),
-  "settings.send",
+  "settings.general",
   "settings.appearance",
   "rules.title",
   "pgp.title",
   "ai.title",
   "backup.title",
-  "security.title",
 ]
 
 function sectionId(titleKey: string): string {
@@ -156,7 +127,7 @@ export function SettingsPage() {
   const t = useT()
   return (
     <PageBody>
-      <PageHeader title={t("settings.title")} description={t("settings.description")} />
+      <PageHeader title={t("settings.title")} />
       <div className="md:grid md:grid-cols-[10.5rem_minmax(0,1fr)] md:gap-10">
         <nav aria-label={t("settings.sections")} className="hidden md:block">
           <ul className="sticky top-6 flex flex-col gap-0.5">
@@ -178,21 +149,17 @@ export function SettingsPage() {
           </ul>
         </nav>
         <div className="flex min-w-0 flex-col gap-8">
-          {groups.map((g) => (
-            <Section key={g.titleKey} titleKey={g.titleKey} icon={g.icon}>
-              {g.toggles.map((tg) => (
-                <ToggleRow key={tg.key} def={tg} />
-              ))}
-            </Section>
-          ))}
-
-          <Section titleKey="settings.send" icon={Clock}>
+          <Section titleKey="settings.general" icon={SlidersHorizontal}>
+            <ToggleRow def={notificationsToggle} />
+            <ToggleRow def={keyboardToggle} />
             <SendUndoRow />
           </Section>
 
           <Section titleKey="settings.appearance" icon={Palette}>
             <ThemeRow />
+            <AccentRow />
             <LanguageRow />
+            <ToggleRow def={compactToggle} />
           </Section>
 
           <Section titleKey="rules.title" icon={Filter}>
@@ -219,21 +186,6 @@ export function SettingsPage() {
             <AutoBackupDirRow />
           </Section>
 
-          <Section titleKey="security.title" icon={ShieldCheck}>
-            <div className="flex items-start gap-4 px-4 py-3.5">
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="flex items-center gap-2 font-semibold">
-                  {t("security.secureStorage")}{" "}
-                  <Badge variant="secondary">{t("security.keyringBadge")}</Badge>
-                </span>
-                <span className="text-[13px] text-muted-foreground">
-                  {t("security.keyringDesc")}
-                </span>
-              </div>
-            </div>
-          </Section>
-
-          <p className="text-xs text-muted-foreground">{t("settings.autoSaved")}</p>
           <p className="text-xs text-muted-foreground">
             {t("settings.version", { version: __APP_VERSION__ })}
           </p>
@@ -276,9 +228,7 @@ function SendUndoRow() {
     <div className="flex items-center gap-4 px-4 py-3.5">
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-semibold">{t("settings.undoWindow")}</span>
-        <span className="text-[13px] text-muted-foreground">
-          {t("settings.undoWindowDesc")} {value === 0 ? t("settings.undoWindowOff") : undefined}
-        </span>
+        <span className="text-[13px] text-muted-foreground">{t("settings.undoWindowDesc")}</span>
       </span>
       <Select
         value={String(value)}
@@ -360,7 +310,7 @@ function ToggleRow({ def }: { def: ToggleDef }) {
     <label className="flex cursor-pointer items-center gap-4 px-4 py-3.5 hover:bg-accent">
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-semibold">{t(def.labelKey)}</span>
-        <span className="text-[13px] text-muted-foreground">{t(def.descKey)}</span>
+        {def.descKey && <span className="text-[13px] text-muted-foreground">{t(def.descKey)}</span>}
         {def.hint}
       </span>
       <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={t(def.labelKey)} />
@@ -388,10 +338,7 @@ function ThemeRow(): React.JSX.Element {
 
   return (
     <div className="flex flex-wrap items-center gap-4 px-4 py-3.5">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="font-semibold">{t("settings.theme")}</span>
-        <span className="text-[13px] text-muted-foreground">{t("settings.themeDesc")}</span>
-      </div>
+      <span className="min-w-0 flex-1 font-semibold">{t("settings.theme")}</span>
       <ToggleGroup
         type="single"
         variant="outline"
@@ -403,6 +350,53 @@ function ThemeRow(): React.JSX.Element {
           <ToggleGroupItem key={o.value} value={o.value} aria-label={t(o.labelKey)}>
             <o.icon data-icon="inline-start" />
             {t(o.labelKey)}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
+  )
+}
+
+/** AccentRow — brand color of the UI (see the "Sky" block in global.css).
+ *  Each swatch carries its own data-accent so it previews its color. */
+function AccentRow(): React.JSX.Element {
+  const t = useT()
+  const [accent, setUiAccent] = React.useState<Accent>(() => getAccent())
+
+  React.useEffect(() => {
+    const onStorage = () => setUiAccent(getAccent())
+    window.addEventListener("storage", onStorage)
+    return () => window.removeEventListener("storage", onStorage)
+  }, [])
+
+  return (
+    <div className="flex flex-wrap items-center gap-4 px-4 py-3.5">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="font-semibold">{t("settings.accent")}</span>
+        <span className="text-[13px] text-muted-foreground">{t(`settings.accent.${accent}`)}</span>
+      </span>
+      <ToggleGroup
+        type="single"
+        value={accent}
+        onValueChange={(next) => {
+          if (!next) return
+          setUiAccent(setAccent(next as Accent))
+        }}
+        aria-label={t("settings.accent")}
+        className="gap-1.5"
+      >
+        {ACCENTS.map((a) => (
+          <ToggleGroupItem
+            key={a}
+            value={a}
+            aria-label={t(`settings.accent.${a}`)}
+            title={t(`settings.accent.${a}`)}
+            className="size-8 rounded-full p-0 data-[state=on]:bg-transparent"
+          >
+            <span
+              data-accent={a}
+              className="size-5 rounded-full bg-(--brand) ring-offset-2 ring-offset-card group-data-[state=on]/toggle:ring-2 group-data-[state=on]/toggle:ring-(--brand) dark:bg-(--brand-dark) dark:group-data-[state=on]/toggle:ring-(--brand-dark)"
+            />
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
@@ -431,12 +425,9 @@ function LanguageRow(): React.JSX.Element {
 
   return (
     <div className="flex flex-wrap items-center gap-4 px-4 py-3.5">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="font-semibold">{t("settings.language")}</span>
-        <span className="text-[13px] text-muted-foreground">{t("settings.languageDesc")}</span>
-      </div>
+      <span className="min-w-0 flex-1 font-semibold">{t("settings.language")}</span>
       <Select value={locale} onValueChange={onChange}>
-        <SelectTrigger className="w-40" aria-label={t("settings.languageLabel")}>
+        <SelectTrigger className="w-40" aria-label={t("settings.language")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

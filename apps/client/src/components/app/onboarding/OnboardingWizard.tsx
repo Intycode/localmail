@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Keyboard, Languages, Mail, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react"
+import { Check, Languages, RefreshCw, TriangleAlert } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { navigate } from "@/lib/router"
@@ -10,6 +10,7 @@ import { getMailService } from "@/services/serviceRegistry"
 import { syncAccount, syncStore } from "@/services/syncService"
 import type { Account } from "@/types"
 import { AccountConnectForm } from "@/components/app/AccountConnectForm"
+import { AppLogo } from "@/components/app/AppLogo"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -159,27 +160,11 @@ function WelcomeStep({ onStart, onSkip }: { onStart: () => void; onSkip: () => v
   const t = useT()
   return (
     <div className="flex flex-col items-center gap-5 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-        <Mail className="size-7 text-primary" />
-      </div>
+      <AppLogo className="size-14 drop-shadow-md" />
       <DialogHeader className="items-center gap-2">
         <DialogTitle className="text-lg">{t("onboarding.welcomeTitle")}</DialogTitle>
         <DialogDescription className="max-w-sm">{t("onboarding.welcomeDesc")}</DialogDescription>
       </DialogHeader>
-      <ul className="flex flex-col gap-2 text-left text-sm text-muted-foreground">
-        <li className="flex items-center gap-2.5">
-          <ShieldCheck className="size-4 shrink-0 text-primary" />
-          {t("onboarding.pointNoCloud")}
-        </li>
-        <li className="flex items-center gap-2.5">
-          <Mail className="size-4 shrink-0 text-primary" />
-          {t("onboarding.pointLocal")}
-        </li>
-        <li className="flex items-center gap-2.5">
-          <Keyboard className="size-4 shrink-0 text-primary" />
-          {t("onboarding.pointKeyboard")}
-        </li>
-      </ul>
       <div className="flex w-full items-center justify-center gap-2">
         <Languages aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
         <Select value={getLocale()} onValueChange={(v) => v && setLocale(v as Locale)}>
@@ -277,7 +262,7 @@ function SyncStep({
         ) : ev?.type === "sync.completed" ? (
           <>
             <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10">
-              <ShieldCheck className="size-6 text-primary" />
+              <Check className="size-6 text-primary" />
             </div>
             <p className="text-sm font-medium">{t("onboarding.syncDone")}</p>
           </>
@@ -317,9 +302,7 @@ function DoneStep({ onFinish }: { onFinish: () => void }) {
   const t = useT()
   return (
     <div className="flex flex-col items-center gap-5 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-        <Mail className="size-7 text-primary" />
-      </div>
+      <AppLogo className="size-14 drop-shadow-md" />
       <DialogHeader className="items-center gap-2">
         <DialogTitle className="text-lg">{t("onboarding.doneTitle")}</DialogTitle>
         <DialogDescription className="max-w-sm">{t("onboarding.doneDesc")}</DialogDescription>
@@ -339,7 +322,6 @@ function DoneStep({ onFinish }: { onFinish: () => void }) {
           <span className="text-muted-foreground">{t("onboarding.doneArchive")}</span>
         </li>
       </ul>
-      <p className="text-xs text-muted-foreground">{t("onboarding.doneSettings")}</p>
       <div className="mt-1 flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button onClick={onFinish}>{t("onboarding.openMail")}</Button>
       </div>

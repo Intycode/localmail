@@ -301,10 +301,9 @@ export function ThreadPage({ thread, messages, isDraft, folderType, embedded }: 
         <div className="mb-5 min-w-0">
           <h2 className="text-xl font-semibold tracking-tight">{thread.subject}</h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            {thread.from.name || thread.from.email} · {thread.messageCount}{" "}
-            {thread.messageCount === 1
-              ? t("thread.messageCountOne")
-              : t("thread.messageCountMany", { n: thread.messageCount })}
+            {thread.from.name || thread.from.email}
+            {thread.messageCount > 1 &&
+              " · " + t("thread.messageCountMany", { n: thread.messageCount })}
           </p>
         </div>
 
@@ -358,7 +357,6 @@ function MessageCard({ message, whiteBg }: { message: Message; whiteBg: boolean 
     try {
       const { openAttachment } = await import("@/services/tauriMailService")
       await openAttachment(accountId, messageId, name)
-      toast.success(t("thread.opened", { name }))
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : t("thread.openFailed"))
     }

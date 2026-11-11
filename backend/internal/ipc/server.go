@@ -432,6 +432,13 @@ func opAccountsAdd(_ context.Context, app *App, params json.RawMessage) (any, er
 			return nil, err
 		}
 		folders = f
+		if smtpCfg != nil {
+			// outgoing server checked now: a wrong SMTP setup must fail the
+			// add dialog, not the first send
+			if err := smtp.Verify(*smtpCfg, p.Secret, p.AllowInsecure); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	id := newID("a")

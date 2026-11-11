@@ -3,15 +3,14 @@ import { Mail, Pencil, Plus, RefreshCw, Trash2, UserCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
-import { navigate } from "@/lib/router"
-import { formatFolderName, formatProvider } from "@/lib/format"
-import { setActiveAccount, setAccounts as setStoreAccounts } from "@/stores/accountStore"
+import { formatProvider } from "@/lib/format"
+import { setAccounts as setStoreAccounts } from "@/stores/accountStore"
 import { getMailService } from "@/services/serviceRegistry"
-import { syncAccount } from "@/services/syncService"
+import { syncAccount, syncStore } from "@/services/syncService"
 import { isTauri } from "@/services/tauriMailService"
-import { useAccounts } from "@/lib/useAccounts"
+import { switchAccount, useAccounts } from "@/lib/useAccounts"
 import { useT } from "@/lib/i18n"
-import type { Account, ImapAccountDraft } from "@/types"
+import type { Account } from "@/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AccountAvatar } from "@/components/app/AccountAvatar"
@@ -49,11 +48,7 @@ export function AccountsPage({ accounts: staticAccounts }: AccountsPageProps) {
   const accounts = useAccounts(staticAccounts)
   return (
     <PageBody>
-      <PageHeader
-        title={t("accounts.title")}
-        description={t("accounts.description")}
-        actions={<AddAccountDialog />}
-      />
+      <PageHeader title={t("accounts.title")} actions={<AddAccountDialog />} />
       {accounts.length === 0 && (
         <Empty className="py-10">
           <EmptyHeader>
@@ -89,26 +84,14 @@ export function AccountsPage({ accounts: staticAccounts }: AccountsPageProps) {
 
 function AccountCard({ account }: { account: Account }) {
   const t = useT()
-  const [syncing, setSyncing] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
+  // real sync state, not a timer: spins until the engine reports the outcome
+  const syncEvent = React.useSyncExternalStore(syncStore.subscribe, syncStore.get, syncStore.get)
+    .byAccount[account.id]
+  const syncing = syncEvent?.type === "sync.started" || syncEvent?.type === "sync.progress"
 
-  async function use(): Promise<void> {
-    setActiveAccount(account.id)
-    if (isTauri()) {
-      try {
-        const svc = (await getMailService()) as AccountAdmin
-        await svc.setActive?.(account.id)
-      } catch {
-        toast.error(t("accounts.setActiveFailed"))
-      }
-    }
-    navigate("/")
-  }
-
-  function sync(): void {
-    setSyncing(true)
-    syncAccount(account.id)
-    setTimeout(() => setSyncing(false), 800)
+  function use(): void {
+    switchAccount(account.id).catch(() => toast.error(t("accounts.setActiveFailed")))
   }
 
   async function remove(): Promise<void> {
@@ -174,7 +157,12 @@ function AccountCard({ account }: { account: Account }) {
             {t("accounts.useThis")}
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={sync} disabled={syncing}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => syncAccount(account.id)}
+          disabled={syncing}
+        >
           <RefreshCw data-icon="inline-start" className={syncing ? "animate-spin" : undefined} />
           {syncing ? t("accounts.syncing") : t("accounts.sync")}
         </Button>
@@ -207,27 +195,13 @@ function AccountCard({ account }: { account: Account }) {
           </Dialog>
         )}
       </div>
-      <div className="flex basis-full flex-wrap gap-1.5 sm:pl-[3.25rem]">
-        {account.folders.length > 0 ? (
-          account.folders.map((f) => (
-            <Badge key={f.id} variant="outline" className="font-normal">
-              {formatFolderName(f.name)}{" "}
-              <span className="text-muted-foreground tabular-nums">{f.total}</span>
-            </Badge>
-          ))
-        ) : (
-          <span className="text-[13px] text-muted-foreground">{t("accounts.noFolders")}</span>
-        )}
-      </div>
     </li>
   )
 }
 
 /** Engine-side account administration (Tauri only). */
 type AccountAdmin = {
-  addAccount?: (draft: ImapAccountDraft) => Promise<Account>
   removeAccount?: (accountId: string) => Promise<void>
-  setActive?: (accountId: string) => Promise<void>
 }
 
 /**
@@ -249,10 +223,12 @@ function AddAccountDialog({ trigger }: { trigger?: React.ReactNode }) {
       </DialogTrigger>
       {/* Fixed header + scrollable body + pinned footer: the form always fits
           the window and the password / submit stay reachable. */}
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[34rem]">
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[34rem]"
+      >
         <DialogHeader className="shrink-0 border-b border-border px-6 pt-5 pr-12 pb-4">
-          <DialogTitle>{t("accounts.addImapTitle")}</DialogTitle>
-          <DialogDescription>{t("accounts.addImapDesc")}</DialogDescription>
+          <DialogTitle>{t("nav.connectAccount")}</DialogTitle>
         </DialogHeader>
         <AccountConnectForm
           formId="add-account-form"

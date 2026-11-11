@@ -19,7 +19,6 @@ import { ThreadPageLoader } from "./ThreadPageLoader"
 interface InboxPageProps {
   /** Pre-rendered threads from the local store (empty until an account syncs). */
   threads: Thread[]
-  emptyText?: string
   /** Explicit folder from the router; the URL param is the fallback. */
   folderId?: string
   /** Account-level view: "all" = unified inbox across accounts, else one id. */
@@ -42,7 +41,6 @@ function viewKey(folderId: string, accountId?: string): string {
  */
 export function InboxPage({
   threads: initialThreads,
-  emptyText,
   folderId: folderIdProp,
   accountId,
   accounts,
@@ -161,10 +159,12 @@ export function InboxPage({
             <EmptyMedia variant="icon">
               <Inbox />
             </EmptyMedia>
-            <EmptyTitle>
-              {accountId === "all" ? t("inbox.emptyUnified") : t("inbox.emptyFolder")}
-            </EmptyTitle>
-            <EmptyDescription>{emptyText ?? t("inbox.emptyDesc")}</EmptyDescription>
+            <EmptyTitle>{t("inbox.emptyUnified")}</EmptyTitle>
+            {(accounts ?? []).length === 0 && (
+              <EmptyDescription>
+                <a href="/accounts">{t("nav.connectAccount")}</a>
+              </EmptyDescription>
+            )}
           </EmptyHeader>
         </Empty>
       </div>
@@ -212,9 +212,11 @@ export function InboxPage({
       >
         <header className="shrink-0 border-b border-border px-4 pt-3.5 pb-3">
           <h1 className="truncate text-[17px] font-semibold tracking-tight">{title}</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {unread > 0 ? t("inbox.unreadCount", { n: unread }) : t("inbox.allRead")}
-          </p>
+          {unread > 0 && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("inbox.unreadCount", { n: unread })}
+            </p>
+          )}
         </header>
         {list}
       </section>
@@ -229,7 +231,6 @@ export function InboxPage({
                   <Mail />
                 </EmptyMedia>
                 <EmptyTitle>{t("inbox.selectThread")}</EmptyTitle>
-                <EmptyDescription>{t("inbox.selectThreadDesc")}</EmptyDescription>
               </EmptyHeader>
             </Empty>
           </div>
