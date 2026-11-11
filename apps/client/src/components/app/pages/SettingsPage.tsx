@@ -158,6 +158,7 @@ export function SettingsPage() {
             <ToggleRow def={keyboardToggle} />
             <SendUndoRow />
             <SyncIntervalRow />
+            <LogsRow />
           </Section>
 
           <Section titleKey="settings.appearance" icon={Palette}>
@@ -411,6 +412,36 @@ function RecoveryKeyRows() {
         </Button>
       </div>
     </>
+  )
+}
+
+/** Opens the folder with engine.log: what support asks for first. */
+function LogsRow() {
+  const t = useT()
+
+  async function open(): Promise<void> {
+    if (!isTauri()) {
+      toast.error(t("common.desktopOnly"))
+      return
+    }
+    try {
+      await ioService.openLogsDir()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : t("settings.logsError"))
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-4 px-4 py-3.5">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="font-semibold">{t("settings.logs")}</span>
+        <span className="text-[13px] text-muted-foreground">{t("settings.logsDesc")}</span>
+      </span>
+      <Button variant="outline" size="sm" onClick={() => void open()}>
+        <FolderOpen data-icon="inline-start" />
+        {t("settings.logsBtn")}
+      </Button>
+    </div>
   )
 }
 

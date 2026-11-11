@@ -384,6 +384,10 @@ export const it: Record<string, string> = {
   "settings.syncInterval": "Sincronizzazione",
   "settings.syncIntervalDesc":
     "Ogni quanto controllare la nuova posta. Sincronizza sempre all'avvio.",
+  "settings.logs": "Log di diagnostica",
+  "settings.logsDesc": "Apre la cartella con il log del motore, da allegare a una segnalazione.",
+  "settings.logsBtn": "Apri cartella",
+  "settings.logsError": "Impossibile aprire la cartella dei log.",
   "settings.syncStartup": "Solo all'avvio",
   "settings.minutes": "Ogni {n} minuti",
   "settings.appearance": "Aspetto",

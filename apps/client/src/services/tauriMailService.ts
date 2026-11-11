@@ -93,6 +93,9 @@ export const ioService = {
   async recoveryKeyImport(src: string): Promise<void> {
     await call<void>("recovery_key_import", { src })
   },
+  async openLogsDir(): Promise<void> {
+    await call<void>("open_logs_dir", {})
+  },
 }
 
 /** SemanticSearchService — optional embedding layer (M10): status of the

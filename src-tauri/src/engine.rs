@@ -607,6 +607,23 @@ pub async fn attachment_preview(
     .await)
 }
 
+/// open_logs_dir shows app_data/logs (engine.log) in the system file manager,
+/// so a user can attach it to a bug report without hunting for a hidden folder.
+#[tauri::command]
+pub async fn open_logs_dir(app: AppHandle) -> Result<Value, ()> {
+    let result = (|| -> Result<Value, String> {
+        let dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("cartella dati non disponibile: {}", e))?
+            .join("logs");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("creazione cartella log: {}", e))?;
+        open_with_default(&dir)?;
+        Ok(json!({}))
+    })();
+    Ok(envelope(result))
+}
+
 #[tauri::command]
 pub async fn attachment_open(
     state: tauri::State<'_, Arc<Engine>>,
