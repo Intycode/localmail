@@ -67,6 +67,7 @@ Le build sono **locali**: la firma Windows usa un token USB, quindi niente CI.
 ### Procedura di rilascio
 
 Dal branch `main`, working tree pulito, check verdi (`bash scripts/check-all.sh`).
+`release bump` lo verifica da solo: si ferma se il branch non è `main` o se `check-all.sh` fallisce.
 
 1. **Mac** — bump, commit, tag annotato, push:
    ```sh

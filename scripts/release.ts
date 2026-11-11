@@ -40,6 +40,11 @@ async function bump(next: string | undefined): Promise<void> {
   const newer = nxt[0] - cur[0] || nxt[1] - cur[1] || nxt[2] - cur[2]
   if (newer <= 0) die(`${next} is not greater than ${version()} (the updater only installs newer versions)`)
   if ((await $`git status --porcelain`.text()).trim()) die("working tree not clean: commit first")
+  const branch = (await $`git branch --show-current`.text()).trim()
+  if (branch !== "main") die(`releases are cut from main (current branch: ${branch || "detached HEAD"})`)
+  // never tag a version that does not pass the quality gate
+  const gate = Bun.spawnSync(["bash", "scripts/check-all.sh"], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] })
+  if (gate.exitCode !== 0) die("scripts/check-all.sh failed: fix the checks before releasing")
 
   for (const p of ["package.json", "apps/client/package.json"]) {
     const s = readFileSync(join(ROOT, p), "utf8")
