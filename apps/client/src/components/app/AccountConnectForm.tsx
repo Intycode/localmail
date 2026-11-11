@@ -279,12 +279,7 @@ export function AccountConnectForm({
                 : t("accounts.connecting")}
           </div>
         )}
-        <form
-          id={formId}
-          inert={busy}
-          className={bodyClassName}
-          onSubmit={(e) => void submit(e)}
-        >
+        <form id={formId} inert={busy} className={bodyClassName} onSubmit={(e) => void submit(e)}>
           <FieldGroup className="gap-4">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Button
