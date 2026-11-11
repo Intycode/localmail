@@ -706,17 +706,17 @@ func opMessageMarkRead(_ context.Context, app *App, params json.RawMessage) (any
 	if err := decode(params, &p); err != nil || p.MessageID == "" {
 		return nil, fmt.Errorf("messageId mancante")
 	}
-	_, folderID, mailbox, uid, err := app.Messages.ActionTarget(p.MessageID)
+	accountID, _, mailbox, uid, err := app.Messages.ActionTarget(p.MessageID)
 	if err != nil {
-		return nil, err
-	}
-	if err := withProvider(app, folderID, func(pv provider.MailProvider) error {
-		return pv.MarkRead(mailbox, []uint32{uid})
-	}); err != nil {
 		return nil, err
 	}
 	if err := app.Messages.MarkRead(p.MessageID); err != nil {
 		return nil, err
+	}
+	if uid != 0 { // local-only messages (drafts) have nothing on the server
+		if err := pushServerCmd(app, cmdFlags, serverCmd{AccountID: accountID, Mailbox: mailbox, UIDs: []uint32{uid}}); err != nil {
+			return nil, err
+		}
 	}
 	return map[string]bool{"ok": true}, nil
 }
@@ -752,23 +752,20 @@ func threadFlagOp(app *App, threadID string, unread bool) error {
 		folderIDs = append(folderIDs, id)
 	}
 	sort.Strings(folderIDs)
-	for _, folderID := range folderIDs {
-		g := byFolder[folderID]
-		if err := withProvider(app, folderID, func(pv provider.MailProvider) error {
-			if unread {
-				return pv.MarkUnread(g.mailbox, g.uids)
-			}
-			return pv.MarkRead(g.mailbox, g.uids)
-		}); err != nil {
-			return err
-		}
-	}
+	// local first: the UI sees the change at once; the server follows
 	if unread {
 		if err := app.Messages.MarkThreadUnread(threadID); err != nil {
 			return err
 		}
 	} else if err := app.Messages.MarkThreadRead(threadID); err != nil {
 		return err
+	}
+	accountID := threadAccount(app, threadID)
+	for _, folderID := range folderIDs {
+		g := byFolder[folderID]
+		if err := pushServerCmd(app, cmdFlags, serverCmd{AccountID: accountID, Mailbox: g.mailbox, UIDs: g.uids, Unread: unread}); err != nil {
+			return err
+		}
 	}
 	// refresh the sidebar badges + notify the UI (account.updated triggers an
 	// accounts+threads refresh in the frontend)
@@ -851,22 +848,25 @@ func opMessageDelete(_ context.Context, app *App, params json.RawMessage) (any, 
 	if err := decode(params, &p); err != nil || p.MessageID == "" {
 		return nil, fmt.Errorf("messageId mancante")
 	}
-	_, folderID, mailbox, uid, err := app.Messages.ActionTarget(p.MessageID)
+	accountID, _, mailbox, uid, err := app.Messages.ActionTarget(p.MessageID)
 	if err != nil {
 		return nil, err
 	}
-	if err := withProvider(app, folderID, func(pv provider.MailProvider) error {
-		return pv.Delete(mailbox, []uint32{uid})
-	}); err != nil {
+	if err := app.Messages.DeleteFull(p.MessageID); err != nil {
 		return nil, err
 	}
-	return map[string]bool{"ok": true}, app.Messages.DeleteFull(p.MessageID)
+	if uid != 0 {
+		if err := pushServerCmd(app, cmdDelete, serverCmd{AccountID: accountID, Mailbox: mailbox, UIDs: []uint32{uid}}); err != nil {
+			return nil, err
+		}
+	}
+	return map[string]bool{"ok": true}, nil
 }
 
 // moveThreadToFolder is the shared implementation behind thread.archive and
-// thread.move: server-side IMAP MOVE of every message UID (skipped for
-// local-only folders without an imap_name or already-moved threads), local
-// folder switch, then badge refresh on both affected folders.
+// thread.move: local folder switch and badge refresh first, then the
+// server-side IMAP MOVE of every message UID as a queued command (skipped for
+// local-only folders without an imap_name or already-moved threads).
 func moveThreadToFolder(app *App, threadID, targetFolder string) error {
 	var accountID string
 	if err := app.DB.QueryRow(`SELECT account FROM threads WHERE id=?`, threadID).Scan(&accountID); err != nil {
@@ -884,13 +884,6 @@ func moveThreadToFolder(app *App, threadID, targetFolder string) error {
 	mailbox, uids, err := app.Messages.ThreadUIDs(threadID)
 	if err != nil {
 		return err
-	}
-	if len(uids) > 0 && targetMailbox != "" && mailbox != "" && targetMailbox != mailbox {
-		if err := withProvider(app, "", func(pv provider.MailProvider) error {
-			return pv.Move(mailbox, uids, targetMailbox)
-		}, accountID); err != nil {
-			return err
-		}
 	}
 	// source folders must be collected BEFORE the local move: afterwards the
 	// messages no longer reference them and their badges would go stale
@@ -910,6 +903,10 @@ func moveThreadToFolder(app *App, threadID, targetFolder string) error {
 	}
 	// the move changes both folders' badges: refresh them and notify the UI
 	recomputeFolderCounters(app, accountID, append(sourceFolders, targetID)...)
+	// server MOVE follows (skipped for local-only folders and no-op moves)
+	if targetMailbox != "" && targetMailbox != mailbox {
+		return pushServerCmd(app, cmdMove, serverCmd{AccountID: accountID, Mailbox: mailbox, UIDs: uids, Target: targetMailbox})
+	}
 	return nil
 }
 

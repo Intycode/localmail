@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -139,24 +140,47 @@ func drainPass(app *App) (processed int, offlineSeen bool) {
 	if err != nil || len(due) == 0 {
 		return 0, false
 	}
+	// srv.* commands replay in creation order per account: once one fails,
+	// the later ones wait (a read flag must not overtake the unread before it)
+	blocked := map[string]bool{}
 	for _, op := range due {
-		handler, ok := ops[op.Kind]
-		if !ok {
-			// op no longer allowed by the protocol: drop it
-			_ = app.Queue.Done(op.ID)
+		srv := isServerCmd(op.Kind)
+		if srv && blocked[op.AccountID] {
 			continue
+		}
+		var h handler
+		if !srv {
+			var ok bool
+			if h, ok = ops[op.Kind]; !ok {
+				// op no longer allowed by the protocol: drop it
+				_ = app.Queue.Done(op.ID)
+				continue
+			}
 		}
 		// claim first: an op cancelled (undo-send) since the snapshot is skipped
 		if claimed, err := app.Queue.Claim(op.ID); err != nil || !claimed {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), opTimeout(op.Kind))
-		_, execErr := handler(ctx, app, json.RawMessage(op.Payload))
-		cancel()
+		var execErr error
+		if srv {
+			execErr = replayServerCmd(app, op)
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), opTimeout(op.Kind))
+			_, execErr = h(ctx, app, json.RawMessage(op.Payload))
+			cancel()
+		}
 		processed++
 		if execErr == nil {
 			_ = app.Queue.Done(op.ID)
 			continue
+		}
+		if srv {
+			if !isNetworkError(execErr) && op.Attempts+1 >= maxServerCmdAttempts {
+				log.Printf("outbox: %s scartato dopo %d tentativi: %v", op.Kind, op.Attempts+1, execErr)
+				_ = app.Queue.Done(op.ID)
+				continue
+			}
+			blocked[op.AccountID] = true
 		}
 		_ = app.Queue.Failed(op.ID, execErr, time.Now())
 		if isNetworkError(execErr) {
