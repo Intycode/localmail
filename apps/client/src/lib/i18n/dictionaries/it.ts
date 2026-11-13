@@ -7,7 +7,7 @@ export const it: Record<string, string> = {
   // --- pagine (titoli del documento) ---
   "page.inbox": "Inbox — LocalMail",
   "page.thread": "Conversazione — LocalMail",
-  "page.compose": "Componi — LocalMail",
+  "page.compose": "Nuovo messaggio — LocalMail",
   "page.search": "Cerca — LocalMail",
   "page.accounts": "Account — LocalMail",
   "page.settings": "Impostazioni — LocalMail",
@@ -39,7 +39,7 @@ export const it: Record<string, string> = {
   "nav.manageAccounts": "Gestisci account…",
   "nav.activeBadge": "attivo",
   "nav.search": "Cerca",
-  "nav.compose": "Componi",
+  "nav.compose": "Nuovo messaggio",
   "nav.noAccountYet": "Collega un account",
 
   // --- finestra (title bar) ---
@@ -213,6 +213,7 @@ export const it: Record<string, string> = {
   "search.semantic": "Semantica",
   "search.noResults": 'Nessun risultato per "{query}".',
   "search.title": "Ricerca",
+  "search.boxPlaceholder": "Cerca nelle mail…",
   "search.matchSubject": "oggetto",
   "search.matchSender": "mittente",
   "search.matchRecipient": "destinatario",
@@ -243,7 +244,8 @@ export const it: Record<string, string> = {
   "accounts.removeForever": "Rimuovi definitivamente",
 
   // --- import / export ---
-  "io.title": "Importa ed esporta",
+  "io.title": "Importa, esporta e backup",
+  "io.button": "Avanzate",
   "io.description":
     'Le mail importate finiscono nella cartella locale "Importate" e non vengono sincronizzate.',
   "io.pickAccount": "Account",
@@ -256,7 +258,6 @@ export const it: Record<string, string> = {
   "io.exported": "Esportate {count} mail{failed}",
   "io.exportFailed": " ({n} non scaricate)",
   "io.exportError": "Esportazione non riuscita",
-  "io.pickImportAccount": "Scegli l'account in cui importare",
   "io.imported": "Importate {count} mail nella cartella Importate{skipped}",
   "io.importSkipped": " ({n} scartate)",
   "io.importError": "Importazione non riuscita",

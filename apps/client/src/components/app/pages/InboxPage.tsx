@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Inbox, Mail, Paperclip, Star } from "lucide-react"
+import { Inbox, Mail, Paperclip, RefreshCw, Star } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -9,8 +9,11 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useT } from "@/lib/i18n"
 import { getMailService } from "@/services/serviceRegistry"
 import { mergeFirstPage, THREAD_PAGE, type ThreadListOptions } from "@/services/mailService"
+import { syncAll, syncStore } from "@/services/syncService"
 import { threadStore } from "@/stores/threadStore"
 import type { Account, Thread } from "@/types"
+import { Button } from "@/components/ui/button"
+import { SearchBox } from "@/components/app/SearchBox"
 import { ThreadContextMenu } from "@/components/app/ThreadContextMenu"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -83,6 +86,11 @@ export function InboxPage({
   // Engine pushes (IDLE, sync) land in threadStore via syncService; adopt them
   // when they are for this exact view so the visible list stays fresh without
   // a navigation.
+  const syncing = React.useSyncExternalStore(
+    syncStore.subscribe,
+    () => syncStore.get().running,
+    () => syncStore.get().running,
+  )
   const stored = React.useSyncExternalStore(
     threadStore.subscribe,
     () => threadStore.get(),
@@ -284,6 +292,20 @@ export function InboxPage({
         style={{ "--list-w": `${listW}px` } as React.CSSProperties}
         className="flex min-h-0 w-full min-w-0 flex-col md:w-[var(--list-w)] md:shrink-0 md:border-r md:border-border"
       >
+        <div className="flex shrink-0 items-center justify-end gap-1 border-b border-border px-3 py-1.5">
+          {/* mobile has the search page link in the top bar */}
+          <SearchBox onPick={select} className="hidden min-w-0 flex-1 md:block" />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("accounts.sync")}
+            title={t("accounts.sync")}
+            disabled={syncing}
+            onClick={() => void syncAll()}
+          >
+            <RefreshCw className={syncing ? "animate-spin" : undefined} />
+          </Button>
+        </div>
         <header className="shrink-0 border-b border-border px-4 pt-3.5 pb-3">
           <h1 className="truncate text-[17px] font-semibold tracking-tight">{title}</h1>
           {unread > 0 && (

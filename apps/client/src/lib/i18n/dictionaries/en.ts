@@ -6,7 +6,7 @@ export const en: Record<string, string> = {
   // --- document titles ---
   "page.inbox": "Inbox — LocalMail",
   "page.thread": "Thread — LocalMail",
-  "page.compose": "Compose — LocalMail",
+  "page.compose": "New message — LocalMail",
   "page.search": "Search — LocalMail",
   "page.accounts": "Accounts — LocalMail",
   "page.settings": "Settings — LocalMail",
@@ -37,7 +37,7 @@ export const en: Record<string, string> = {
   "nav.manageAccounts": "Manage accounts…",
   "nav.activeBadge": "active",
   "nav.search": "Search",
-  "nav.compose": "Compose",
+  "nav.compose": "New message",
   "nav.noAccountYet": "Connect an account",
 
   // --- window (title bar) ---
@@ -211,6 +211,7 @@ export const en: Record<string, string> = {
   "search.semantic": "Semantic",
   "search.noResults": 'No results for "{query}".',
   "search.title": "Search",
+  "search.boxPlaceholder": "Search mail…",
   "search.matchSubject": "subject",
   "search.matchSender": "sender",
   "search.matchRecipient": "recipient",
@@ -241,7 +242,8 @@ export const en: Record<string, string> = {
   "accounts.removeForever": "Remove permanently",
 
   // --- import / export ---
-  "io.title": "Import & export",
+  "io.title": "Import, export & backup",
+  "io.button": "Advanced",
   "io.description": 'Imported mail goes into the local "Imported" folder and is not synced.',
   "io.pickAccount": "Account",
   "io.pickAccountPlaceholder": "Account...",
@@ -253,7 +255,6 @@ export const en: Record<string, string> = {
   "io.exported": "Exported {count} messages{failed}",
   "io.exportFailed": " ({n} not downloaded)",
   "io.exportError": "Export failed",
-  "io.pickImportAccount": "Choose the account to import into",
   "io.imported": "Imported {count} messages into the Imported folder{skipped}",
   "io.importSkipped": " ({n} skipped)",
   "io.importError": "Import failed",

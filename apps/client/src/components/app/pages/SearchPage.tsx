@@ -21,7 +21,7 @@ const matchedOnKeys: Record<SearchResult["matchedOn"], string> = {
 
 /** HighlightedSnippet renders the engine's FTS5 snippet, turning the [[ ]]
  *  markers around matched terms into a highlighted <mark>. */
-function HighlightedSnippet({ text }: { text: string }) {
+export function HighlightedSnippet({ text }: { text: string }) {
   const parts = text.split(/(\[\[|\]\])/g)
   const out: React.ReactNode[] = []
   let bold = false

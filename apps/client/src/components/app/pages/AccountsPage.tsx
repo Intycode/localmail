@@ -36,7 +36,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { PageBody, PageHeader } from "../PageHeader"
-import { AccountsIo } from "./AccountsIo"
+import { AccountDataDialog } from "./AccountDataDialog"
 
 interface AccountsPageProps {
   accounts: Account[]
@@ -78,7 +78,6 @@ export function AccountsPage({ accounts: staticAccounts }: AccountsPageProps) {
           ))}
         </ul>
       )}
-      {accounts.length > 0 && <AccountsIo accounts={accounts} />}
     </PageBody>
   )
 }
@@ -173,6 +172,7 @@ function AccountCard({ account }: { account: Account }) {
           <RefreshCw data-icon="inline-start" className={syncing ? "animate-spin" : undefined} />
           {syncing ? t("accounts.syncing") : t("accounts.sync")}
         </Button>
+        {isTauri() && <AccountDataDialog account={account} />}
         <SignatureDialog
           accountId={account.id}
           name={account.name}

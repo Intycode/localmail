@@ -41,11 +41,11 @@ test("t() translates known keys for both locales (Italian is a real dict)", () =
   setLocale("it" as Locale)
   expect(t("action.send")).toBe("action.send") // unmigrated key: no silent blank
   expect(t("folder.inbox")).toBe("Posta in arrivo")
-  expect(t("nav.compose")).toBe("Componi")
+  expect(t("nav.compose")).toBe("Nuovo messaggio")
 
   setLocale("en" as Locale)
   expect(t("folder.inbox")).toBe("Inbox")
-  expect(t("nav.compose")).toBe("Compose")
+  expect(t("nav.compose")).toBe("New message")
 })
 
 test("t() interpolates {param} placeholders", () => {

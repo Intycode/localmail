@@ -1,5 +1,5 @@
 import * as React from "react"
-import { LucideProvider, PenLine, Search } from "lucide-react"
+import { LucideProvider, Search, SquarePen } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { navigate } from "@/lib/router"
@@ -98,7 +98,7 @@ export function AppShell({
                   </Button>
                   <Button asChild size="sm">
                     <a href="/compose">
-                      <PenLine data-icon="inline-start" />
+                      <SquarePen data-icon="inline-start" />
                       {t("nav.compose")}
                     </a>
                   </Button>

@@ -9,9 +9,7 @@ import {
   Import,
   Inbox,
   Mails,
-  PenLine,
-  RefreshCw,
-  Search,
+  SquarePen,
   Send,
   SendHorizontal,
   Settings,
@@ -26,7 +24,6 @@ import { routerStore } from "@/lib/router"
 import { useT } from "@/lib/i18n"
 import { switchAccount } from "@/lib/useAccounts"
 import type { Account, Folder } from "@/types"
-import { syncAll, syncStore } from "@/services/syncService"
 import { AccountAvatar } from "@/components/app/AccountAvatar"
 import { AppLogo } from "@/components/app/AppLogo"
 import { OutboxDialog } from "@/components/app/OutboxDialog"
@@ -96,11 +93,6 @@ export function AppSidebar({
   const activeAccount = accounts.find((a) => a.isActive) ?? accounts[0]
   // Unified view entry: meaningful only with more than one account. The badge
   // sums every account's inbox unread count.
-  const syncing = React.useSyncExternalStore(
-    syncStore.subscribe,
-    syncStore.get,
-    syncStore.get,
-  ).running
   const showUnified = accounts.length >= 2
   const unifiedUnread = accounts.reduce(
     (sum, a) =>
@@ -116,34 +108,13 @@ export function AppSidebar({
             <AccountSwitcher accounts={accounts} active={activeAccount} />
           </SidebarMenuItem>
         </SidebarMenu>
-        {/* Compose + search live here on desktop (AppShell's topbar is mobile-only). */}
+        {/* Compose lives here on desktop; search + sync sit in the list toolbar (InboxPage). */}
         <div className="flex gap-1.5 px-0.5 pt-1">
           <Button asChild className="flex-1">
             <a href="/compose" aria-current={route === "compose" ? "page" : undefined}>
-              <PenLine data-icon="inline-start" />
+              <SquarePen data-icon="inline-start" />
               {t("nav.compose")}
             </a>
-          </Button>
-          <Button
-            asChild
-            variant={route === "search" ? "secondary" : "outline"}
-            size="icon"
-            aria-label={t("nav.search")}
-            title={t("nav.search")}
-          >
-            <a href="/search" aria-current={route === "search" ? "page" : undefined}>
-              <Search />
-            </a>
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label={t("accounts.sync")}
-            title={t("accounts.sync")}
-            disabled={syncing}
-            onClick={() => void syncAll()}
-          >
-            <RefreshCw className={syncing ? "animate-spin" : undefined} />
           </Button>
         </div>
       </SidebarHeader>
