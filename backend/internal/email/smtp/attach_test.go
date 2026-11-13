@@ -254,13 +254,14 @@ func TestComposeInlineImagesBecomeCid(t *testing.T) {
 	if !strings.Contains(s, base64.StdEncoding.EncodeToString(png)) {
 		t.Errorf("image payload missing")
 	}
-	// the result must still parse, with the html pointing at the cid part
+	// the result must still parse, and the cid part comes back inlined as a
+	// data: URI (the reader embeds cid images at ingest)
 	parsed, err := enginemime.Parse(raw)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if !strings.Contains(parsed.Body, `src="cid:img1.`) {
-		t.Errorf("html does not reference the cid: %q", parsed.Body)
+	if !strings.Contains(parsed.Body, uri) || strings.Contains(parsed.Body, "cid:") {
+		t.Errorf("cid image not inlined on parse: %q", parsed.Body)
 	}
 	if len(parsed.Attachments) != 0 {
 		t.Errorf("inline image listed as attachment: %+v", parsed.Attachments)

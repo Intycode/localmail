@@ -13,6 +13,7 @@ import { syncAll, syncStore } from "@/services/syncService"
 import { threadStore } from "@/stores/threadStore"
 import type { Account, Thread } from "@/types"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { SearchBox } from "@/components/app/SearchBox"
 import { ThreadContextMenu } from "@/components/app/ThreadContextMenu"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -57,6 +58,8 @@ export function InboxPage({
   const [compact, setCompact] = React.useState(() => getSetting("compact", false))
   // Desktop: rows open the thread in the reading pane; mobile keeps /thread.
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  // double click: the thread opens in a modal of its own
+  const [modalThread, setModalThread] = React.useState<Thread | null>(null)
   const isMobile = useIsMobile()
   // Draggable divider: list width in px (the reader takes the rest), persisted.
   const [listW, setListW] = React.useState(416)
@@ -261,6 +264,7 @@ export function InboxPage({
                 account={accountById.get(t.accountId)}
                 selected={t.id === selectedId}
                 onSelect={isMobile ? undefined : () => select(t.id)}
+                onOpenModal={isMobile ? undefined : () => setModalThread(t)}
                 onChange={(next) =>
                   setThreads((prev) =>
                     next === null
@@ -357,6 +361,17 @@ export function InboxPage({
           </div>
         )}
       </div>
+      <Dialog open={modalThread !== null} onOpenChange={(o) => !o && setModalThread(null)}>
+        <DialogContent
+          aria-describedby={undefined}
+          className="flex h-[85dvh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+        >
+          <DialogTitle className="sr-only">{modalThread?.subject}</DialogTitle>
+          {modalThread && (
+            <ThreadPageLoader key={modalThread.id} threadId={modalThread.id} embedded />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -368,6 +383,7 @@ function ThreadRow({
   account,
   selected,
   onSelect,
+  onOpenModal,
   onChange,
 }: {
   thread: Thread
@@ -377,6 +393,8 @@ function ThreadRow({
   selected: boolean
   /** set on desktop: open in the reading pane instead of navigating */
   onSelect?: () => void
+  /** set on desktop: double click opens the thread in a modal */
+  onOpenModal?: () => void
   /** null = remove the row from the list; Thread = replace it (flag changes). */
   onChange: (next: Thread | null) => void
 }) {
@@ -401,6 +419,14 @@ function ThreadRow({
         data-thread={thread.id}
         data-pane-link={onSelect ? "" : undefined}
         aria-current={selected ? "true" : undefined}
+        onDoubleClick={
+          onOpenModal
+            ? (e) => {
+                e.preventDefault()
+                onOpenModal()
+              }
+            : undefined
+        }
         onClick={
           onSelect
             ? (e) => {

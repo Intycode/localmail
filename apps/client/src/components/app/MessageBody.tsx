@@ -36,6 +36,27 @@ function stripLinkTrackers(html: string): string {
   }
 }
 
+/** Inline raster images (data:) never leave the machine and always show;
+ *  http(s) images (and anything else, e.g. unresolved cid:) are removed until
+ *  the user allows remote content. */
+function gateImages(html: string, allowRemote: boolean): string {
+  const doc = new DOMParser().parseFromString(html, "text/html")
+  for (const img of doc.querySelectorAll("img")) {
+    const src = (img.getAttribute("src") ?? "").trim()
+    const inline = /^data:image\/(png|jpe?g|gif|webp|avif|bmp);/i.test(src)
+    const remote = /^https?:\/\//i.test(src)
+    if (!inline && !(allowRemote && remote)) img.remove()
+  }
+  return doc.body.innerHTML
+}
+
+/** True when nothing visible is left (no text, no image): the HTML part was
+ *  only styling/blocked content, so the plain-text part is shown instead. */
+function isBlank(html: string): boolean {
+  const doc = new DOMParser().parseFromString(html, "text/html")
+  return !doc.body.textContent?.trim() && !doc.body.querySelector("img")
+}
+
 /**
  * MessageBody — how a message is rendered everywhere in the app: plain text
  * first; sanitized HTML only when a real html part exists (body !== bodyText).
@@ -92,17 +113,18 @@ export function MessageBody({ message, whiteBg }: { message: Message; whiteBg: b
       "font",
       "center",
     ]
-    // tracking pixels are already gone (removed at ingest); with explicit
-    // consent the remaining remote images may load
-    if (allowRemote) tags.push("img")
+    // images are always allowed through DOMPurify; gateImages drops the remote
+    // ones until the user consents (tracking pixels are gone since ingest)
+    tags.push("img")
     const clean = DOMPurify.sanitize(body, {
       ALLOWED_TAGS: tags,
-      FORBID_ATTR: allowRemote
-        ? ["srcset", "onerror", "onload", "onclick"]
-        : ["src", "srcset", "onerror", "onload", "onclick"],
+      FORBID_ATTR: ["srcset", "onerror", "onload", "onclick"],
     })
-    return stripLinkTrackers(clean)
-  }, [message.body, message.bodyText, allowRemote])
+    const gated = gateImages(stripLinkTrackers(clean), allowRemote)
+    // keep the banner (and its "load images" button) while remote images wait
+    const waiting = !allowRemote && message.remoteImages > 0
+    return isBlank(gated) && text && !waiting ? null : gated
+  }, [message.body, message.bodyText, message.remoteImages, allowRemote])
 
   React.useEffect(() => {
     if (!html) return
@@ -128,12 +150,7 @@ export function MessageBody({ message, whiteBg }: { message: Message; whiteBg: b
   if (html) {
     return (
       <div>
-        {allowRemote ? (
-          <p className="mb-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/80">
-            <ShieldCheck className="size-3" />
-            Immagini remote caricate su richiesta · link ripuliti dai tracker
-          </p>
-        ) : (
+        {!allowRemote && (
           <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground/80">
             <span className="flex items-center gap-1">
               <ShieldCheck className="size-3" />

@@ -17,6 +17,7 @@ package mime
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -156,18 +157,13 @@ func tinyImage(n *html.Node) bool {
 	if dimIsTiny(width) || dimIsTiny(height) {
 		return true
 	}
-	for _, prop := range []string{"width", "height"} {
-		if i := strings.Index(style, prop + ":"); i >= 0 {
-			v := strings.TrimSpace(style[i+len(prop)+1:])
-			v = strings.SplitN(v, ";", 2)[0]
-			if dimIsTiny(strings.TrimSpace(v)) {
-				return true
-			}
+	for _, m := range styleDim.FindAllStringSubmatch(style, -1) {
+		if dimIsTiny(m[1]) {
+			return true
 		}
 	}
-	if strings.Contains(style, "display:none") || strings.Contains(style, "display: none") ||
-		strings.Contains(style, "visibility:hidden") || strings.Contains(style, "visibility: hidden") ||
-		strings.Contains(style, "opacity:0") || strings.Contains(style, "opacity: 0") {
+	// whole declarations only: "line-height:1" or "opacity:0.8" must not match
+	if styleHidden.MatchString(style) {
 		return true
 	}
 	if attr(n, "hidden") != "" {
@@ -175,6 +171,14 @@ func tinyImage(n *html.Node) bool {
 	}
 	return false
 }
+
+// styleDim matches the width/height declarations themselves (not
+// "max-width", "line-height", …); styleHidden matches display:none,
+// visibility:hidden and opacity of exactly 0.
+var (
+	styleDim    = regexp.MustCompile(`(?:^|[;\s])(?:width|height)\s*:\s*([^;]*)`)
+	styleHidden = regexp.MustCompile(`(?:^|[;\s])(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0+)?\s*(?:;|$))`)
+)
 
 func dimIsTiny(v string) bool {
 	v = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(v), "px"))
@@ -306,8 +310,8 @@ func SanitizeHTML(body string) (string, int) {
 			if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
 				return // cid:, data: (inline raster), relative: not remote
 			}
-			u, err := url.Parse(src)
-			if err != nil || isTrackerHost(u.Hostname()) {
+			// an unparseable URL is not proof of tracking: keep it (gated as remote)
+			if u, err := url.Parse(src); err == nil && isTrackerHost(u.Hostname()) {
 				if n.Parent != nil {
 					n.Parent.RemoveChild(n)
 				}

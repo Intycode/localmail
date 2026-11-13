@@ -8,9 +8,12 @@ package mime
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io"
 	stdmime "mime"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -87,7 +90,8 @@ func Parse(raw []byte) (domain.Message, error) {
 		// clearsigns only; MIME canonicalization needs the exact bytes)
 		pgpSignedMIME = true
 	}
-	walkParts(reader, &text, &html, &atts, &pgpEncPayload, &pgpSignedMIME, 0)
+	cids := map[string]string{}
+	walkParts(reader, &text, &html, &atts, &pgpEncPayload, &pgpSignedMIME, cids, 0)
 	m.Attachments = atts
 	switch {
 	case pgpEncPayload != "":
@@ -126,7 +130,7 @@ func Parse(raw []byte) (domain.Message, error) {
 		// anti-tracking (M6): strip pixels + link trackers at ingest; count
 		// the remote images the UI will gate behind consent. Only the HTML
 		// part: escaping a clearsigned block would break its signature.
-		clean, remote := SanitizeHTML(m.Body)
+		clean, remote := SanitizeHTML(inlineCIDs(m.Body, cids))
 		m.Body = clean
 		m.RemoteImages = remote
 	}
@@ -149,7 +153,7 @@ func Parse(raw []byte) (domain.Message, error) {
 	return m, nil
 }
 
-func walkParts(r *mail.Reader, text, html *string, atts *[]domain.Attachment, encPayload *string, signedMIME *bool, depth int) {
+func walkParts(r *mail.Reader, text, html *string, atts *[]domain.Attachment, encPayload *string, signedMIME *bool, cids map[string]string, depth int) {
 	if depth > 10 { // nested-multipart cap
 		return
 	}
@@ -163,7 +167,7 @@ func walkParts(r *mail.Reader, text, html *string, atts *[]domain.Attachment, en
 			if name == "" {
 				name = "allegato"
 			}
-			n, _ := io.Copy(io.Discard, io.LimitReader(p.Body, 32<<20))
+			n := captureCID(p, cids)
 			ct := p.Header.Get("Content-Type")
 			if i := strings.Index(ct, ";"); i >= 0 {
 				ct = ct[:i]
@@ -196,14 +200,14 @@ func walkParts(r *mail.Reader, text, html *string, atts *[]domain.Attachment, en
 			if fatal(err) {
 				return
 			}
-			walkParts(sub, text, html, atts, encPayload, signedMIME, depth+1)
+			walkParts(sub, text, html, atts, encPayload, signedMIME, cids, depth+1)
 		case strings.HasPrefix(ct, "multipart/"):
 			// nested multipart: recurse with a sub-reader
 			sub, err := mail.CreateReader(p.Body)
 			if fatal(err) {
 				return
 			}
-			walkParts(sub, text, html, atts, encPayload, signedMIME, depth+1)
+			walkParts(sub, text, html, atts, encPayload, signedMIME, cids, depth+1)
 		case ct == "text/plain":
 			if *text == "" {
 				b, _ := io.ReadAll(io.LimitReader(p.Body, 2<<20))
@@ -219,9 +223,62 @@ func walkParts(r *mail.Reader, text, html *string, atts *[]domain.Attachment, en
 				io.Copy(io.Discard, io.LimitReader(p.Body, 1<<20))
 			}
 		default:
-			io.Copy(io.Discard, io.LimitReader(p.Body, 1<<20))
+			captureCID(p, cids)
 		}
 	}
+}
+
+// Inline images referenced from the HTML as src="cid:…" ride in their own
+// MIME part. They are embedded as data: URIs at ingest (UI shows data: raster
+// images without consent: nothing leaves the machine). Bounded per image and
+// per message so a hostile mail cannot bloat the database.
+const (
+	maxCIDImage = 1 << 20
+	maxCIDTotal = 4 << 20
+)
+
+// captureCID consumes the part body and returns its size. When the part is a
+// raster image with a Content-ID that fits the budget it is recorded in cids.
+func captureCID(p *mail.Part, cids map[string]string) int64 {
+	id := strings.Trim(strings.TrimSpace(p.Header.Get("Content-Id")), "<>")
+	ct, _, _ := stdmime.ParseMediaType(p.Header.Get("Content-Type"))
+	raster := map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
+	if id == "" || !raster[ct] || len(cids) >= 64 {
+		n, _ := io.Copy(io.Discard, io.LimitReader(p.Body, 32<<20))
+		return n
+	}
+	b, _ := io.ReadAll(io.LimitReader(p.Body, maxCIDImage+1))
+	n := int64(len(b))
+	if n <= maxCIDImage {
+		total := 0
+		for _, v := range cids {
+			total += len(v)
+		}
+		if enc := base64.StdEncoding.EncodeToString(b); total+len(enc) <= maxCIDTotal {
+			cids[id] = "data:" + ct + ";base64," + enc
+		}
+	}
+	rest, _ := io.Copy(io.Discard, io.LimitReader(p.Body, 32<<20))
+	return n + rest
+}
+
+var cidRef = regexp.MustCompile(`(?i)cid:([^"'\s>)]+)`)
+
+// inlineCIDs replaces src="cid:…" references with the captured data: URIs.
+func inlineCIDs(html string, cids map[string]string) string {
+	if len(cids) == 0 {
+		return html
+	}
+	return cidRef.ReplaceAllStringFunc(html, func(m string) string {
+		id := cidRef.FindStringSubmatch(m)[1]
+		if u, err := url.PathUnescape(id); err == nil {
+			id = u
+		}
+		if uri, ok := cids[id]; ok {
+			return uri
+		}
+		return m
+	})
 }
 
 func parseAddressList(h *mail.Header, key string) []domain.Recipient {

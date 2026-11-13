@@ -178,7 +178,7 @@ export function ThreadPage({ thread, messages, isDraft, folderType, embedded }: 
             </a>
           </Button>
         )}
-        <div className={cn("flex flex-wrap items-center gap-0.5", !embedded && "ml-auto")}>
+        <div className="flex flex-wrap items-center gap-1">
           {isDraft ? (
             <Button asChild size="sm">
               <a href={`/compose?draft=${encodeURIComponent(last?.id ?? "")}`}>
@@ -195,6 +195,9 @@ export function ThreadPage({ thread, messages, isDraft, folderType, embedded }: 
             </Button>
           )}
           {!isDraft && messages.length > 0 && <SummaryDialog thread={thread} messages={messages} />}
+        </div>
+        {/* secondary actions: pushed right, grouped (triage | view) */}
+        <div className="ml-auto flex flex-wrap items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -263,6 +266,7 @@ export function ThreadPage({ thread, messages, isDraft, folderType, embedded }: 
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          <Separator orientation="vertical" className="mx-1.5 h-4" />
           {thread.isUnread ? (
             <Button
               variant="ghost"

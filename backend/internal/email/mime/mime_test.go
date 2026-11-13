@@ -58,3 +58,25 @@ func TestParseUnknownCharsetKeepsMessageAndParts(t *testing.T) {
 		t.Fatalf("single-part unknown charset dropped: %v", err)
 	}
 }
+
+func TestParseInlinesCIDImages(t *testing.T) {
+	raw := "From: a@x.dev\r\nTo: b@x.dev\r\nSubject: logo\r\nMIME-Version: 1.0\r\n" +
+		"Content-Type: multipart/related; boundary=B\r\n\r\n" +
+		"--B\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" +
+		`<p>Ciao</p><img src="cid:logo@x.dev" width="200"><img src="cid:missing@x.dev">` + "\r\n" +
+		"--B\r\nContent-Type: image/png\r\nContent-Id: <logo@x.dev>\r\nContent-Transfer-Encoding: base64\r\n" +
+		"Content-Disposition: inline; filename=logo.png\r\n\r\niVBORw0KGgo=\r\n--B--\r\n"
+	m, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(m.Body, "data:image/png;base64,iVBORw0KGgo=") {
+		t.Fatalf("cid image not inlined: %s", m.Body)
+	}
+	if strings.Contains(m.Body, "cid:logo") {
+		t.Fatalf("cid reference left: %s", m.Body)
+	}
+	if m.RemoteImages != 0 {
+		t.Fatalf("inline image counted as remote: %d", m.RemoteImages)
+	}
+}

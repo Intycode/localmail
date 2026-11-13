@@ -10,6 +10,7 @@ import {
   type TranslationLanguage,
 } from "@/lib/aiPrompt"
 import { useT } from "@/lib/i18n"
+import { navigate } from "@/lib/router"
 import { aiService, attachmentService } from "@/services/tauriMailService"
 import type { Message, Thread } from "@/types"
 import { Button } from "@/components/ui/button"
@@ -32,7 +33,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 
 interface SummaryDialogProps {
@@ -69,8 +69,22 @@ function pdfAttachments(
   return out
 }
 
+/** Sends the user to Impostazioni → AI locale (the router drops URL hashes,
+ *  so scroll to the section once the page has mounted). */
+function openAISettings(): void {
+  navigate("/settings")
+  let tries = 0
+  const timer = window.setInterval(() => {
+    const el = document.getElementById("s-ai-title")
+    if (el || ++tries > 20) {
+      window.clearInterval(timer)
+      el?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }, 50)
+}
+
 /**
- * SummaryDialog — "Riassumi" opens the summary modal: a tinted Sparkles
+ * SummaryDialog — the AI icon in the thread toolbar opens the summary modal: a tinted Sparkles
  * header with the thread's meta as compact badges, a language toolbar (the
  * base summary is Italian; switching language translates on demand through
  * the local model and caches the result), then the summary as clean
@@ -152,13 +166,29 @@ export function SummaryDialog({ thread, messages }: SummaryDialogProps): React.J
       setState({ status: "ready", threadId: thread.id, content })
     } catch (err: unknown) {
       if (runId.current !== id) return
-      setState({
-        status: "error",
-        threadId: thread.id,
-        message: err instanceof Error ? err.message : t("summary.failed"),
-      })
+      // the model is unreachable or misconfigured: send the user to fix it
+      setState({ status: "idle" })
+      setOpen(false)
+      toast.error(err instanceof Error && err.message ? err.message : t("summary.failed"))
+      openAISettings()
     }
   }, [thread, messages])
+
+  // The icon first checks the local AI is configured and reachable; if not,
+  // go straight to its settings instead of opening a dialog that would fail.
+  async function start(): Promise<void> {
+    try {
+      const st = await aiService.status()
+      if (st.available && !st.error) {
+        setOpen(true)
+        return
+      }
+      toast.error(st.error || t("summary.notConfigured"))
+    } catch {
+      toast.error(t("summary.notConfigured"))
+    }
+    openAISettings()
+  }
 
   // translateTo — switch the view to `target` IMMEDIATELY (optimistic): a
   // cached copy renders at once, otherwise the still-readable original stays
@@ -235,17 +265,15 @@ export function SummaryDialog({ thread, messages }: SummaryDialogProps): React.J
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={t("summary.triggerTitle")}
-          title={t("summary.triggerTitle")}
-        >
-          <Sparkles data-icon="inline-start" />
-          {t("summary.trigger")}
-        </Button>
-      </DialogTrigger>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t("summary.triggerTitle")}
+        title={t("summary.triggerTitle")}
+        onClick={() => void start()}
+      >
+        <Sparkles />
+      </Button>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <div className="flex items-center gap-2.5">

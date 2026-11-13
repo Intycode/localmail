@@ -118,3 +118,25 @@ func TestParseIntegratesSanitizer(t *testing.T) {
 		t.Fatalf("legit content lost: %s", m.Body)
 	}
 }
+
+func TestSanitizeKeepsRealImagesWithLookalikeStyles(t *testing.T) {
+	for _, style := range []string{
+		"line-height:1",           // not a height
+		"max-width:100%;line-height:0",
+		"opacity:0.8",             // not fully transparent
+		"border:1px solid red;max-height:1000px",
+	} {
+		in := `<p><img src="https://cdn.example.com/a.png" style="` + style + `"></p>`
+		out, remote := SanitizeHTML(in)
+		if remote != 1 || !strings.Contains(out, "a.png") {
+			t.Errorf("style %q: image dropped or uncounted (remote=%d, out=%s)", style, remote, out)
+		}
+	}
+	// the real thing is still removed
+	for _, style := range []string{"width:1px", "height: 0", "display:none", "opacity:0", "opacity: 0;color:red"} {
+		out, remote := SanitizeHTML(`<p><img src="https://cdn.example.com/p.gif" style="` + style + `"></p>`)
+		if remote != 0 || strings.Contains(out, "p.gif") {
+			t.Errorf("style %q: hidden pixel kept (out=%s)", style, out)
+		}
+	}
+}

@@ -539,7 +539,6 @@ export const en: Record<string, string> = {
   // --- settings → security ---
 
   // --- AI summary ---
-  "summary.trigger": "Summarize",
   "summary.triggerTitle": "Summarize with local AI",
   "summary.title": "Summary",
   "summary.languageGroup": "Summary language",
@@ -548,6 +547,7 @@ export const en: Record<string, string> = {
   "summary.messageCountMany": "{n} messages",
   "summary.readingPdf": "Reading PDF attachment {i} of {n}: {name}",
   "summary.emptyResponse": "The model replied with empty text.",
+  "summary.notConfigured": "AI is not configured or unreachable: connect an AI server in Settings.",
   "summary.failed": "Summary failed: connect the local AI in Settings.",
   "summary.thinking": "The model is thinking…",
   "summary.translating": "Translating…",

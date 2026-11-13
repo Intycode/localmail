@@ -545,7 +545,6 @@ export const it: Record<string, string> = {
   // --- impostazioni → sicurezza ---
 
   // --- riassunto AI ---
-  "summary.trigger": "Riassumi",
   "summary.triggerTitle": "Riassumi con l'AI locale",
   "summary.title": "Riassunto",
   "summary.languageGroup": "Lingua del riassunto",
@@ -554,6 +553,8 @@ export const it: Record<string, string> = {
   "summary.messageCountMany": "{n} messaggi",
   "summary.readingPdf": "Lettura dell'allegato PDF {i} di {n}: {name}",
   "summary.emptyResponse": "Il modello ha risposto con un testo vuoto.",
+  "summary.notConfigured":
+    "AI non configurata o non raggiungibile: collega un server AI nelle Impostazioni.",
   "summary.failed": "Riassunto non riuscito: collega l'AI locale nelle Impostazioni.",
   "summary.thinking": "Il modello sta pensando…",
   "summary.translating": "Traduzione in corso…",
