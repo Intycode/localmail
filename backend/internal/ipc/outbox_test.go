@@ -15,6 +15,7 @@ import (
 
 	"mail/backend/internal/account"
 	"mail/backend/internal/database"
+	"mail/backend/internal/events"
 	"mail/backend/internal/message"
 	"mail/backend/internal/queue"
 	"mail/backend/internal/thread"
@@ -150,5 +151,54 @@ func TestStripSecretNeverPersistsCredentials(t *testing.T) {
 	}
 	if got := string(stripSecret(nil)); got != "{}" {
 		t.Fatalf("empty params = %s", got)
+	}
+}
+
+// A queued send (undo window / schedule) finishes long after the compose
+// screen is gone: the UI learns the outcome from send.result.
+func TestQueuedSendAnnouncesResult(t *testing.T) {
+	app := newQueueApp(t)
+	app.Events = events.New()
+	seedAccount(t, app, "acc1", "Test", "t@example.com")
+	if _, err := app.DB.Exec(`UPDATE accounts SET provider='mock', active=1 WHERE id='acc1'`); err != nil {
+		t.Fatal(err)
+	}
+	ch, cancel := app.Events.Subscribe()
+	defer cancel()
+
+	result := func() map[string]any {
+		t.Helper()
+		for {
+			select {
+			case e := <-ch:
+				if e.Kind == "send.result" {
+					return e.Data.(map[string]any)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("no send.result event")
+			}
+		}
+	}
+
+	// empty message: the handler rejects it (not an outage) -> announced once
+	if _, err := app.Queue.Enqueue("acc1", "send", []byte(`{"message":{"subject":"","body":""}}`)); err != nil {
+		t.Fatal(err)
+	}
+	drainPass(app)
+	if r := result(); r["ok"] != false || r["error"] == "" {
+		t.Fatalf("failure event = %+v", r)
+	}
+
+	// delivered (stubbed transport: the mock provider cannot send)
+	orig := ops["send"]
+	ops["send"] = func(context.Context, *App, json.RawMessage) (any, error) { return nil, nil }
+	defer func() { ops["send"] = orig }()
+	if _, err := app.Queue.Enqueue("acc1", "send", []byte(`{"message":{"subject":"Ciao"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	// the failed op above backs off; the new one is due immediately
+	drainPass(app)
+	if r := result(); r["ok"] != true || r["subject"] != "Ciao" {
+		t.Fatalf("success event = %+v", r)
 	}
 }

@@ -81,6 +81,13 @@ func (b *Bus) OutboxUpdated(pending int) {
 	b.Publish("outbox.updated", map[string]int{"pending": pending})
 }
 
+// SendResult reports the outcome of a queued send (undo window, scheduled or
+// retried after an outage): the compose screen is long gone by then, so the
+// UI raises a toast from this event.
+func (b *Bus) SendResult(ok bool, subject, errMsg string) {
+	b.Publish("send.result", map[string]any{"ok": ok, "subject": subject, "error": errMsg})
+}
+
 // ConnectionState reports the engine's view of server reachability, emitted
 // on transitions only (offline after a network failure, back online after a
 // successful replay).

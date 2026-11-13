@@ -172,7 +172,15 @@ func drainPass(app *App) (processed int, offlineSeen bool) {
 		processed++
 		if execErr == nil {
 			_ = app.Queue.Done(op.ID)
+			if op.Kind == "send" && app.Events != nil {
+				app.Events.SendResult(true, sendSubject(op), "")
+			}
 			continue
+		}
+		// a real send error (not an outage: the connection banner covers that)
+		// is announced once, on the first failure; the op keeps retrying
+		if op.Kind == "send" && app.Events != nil && op.Attempts == 0 && !isNetworkError(execErr) {
+			app.Events.SendResult(false, sendSubject(op), execErr.Error())
 		}
 		if srv {
 			if !isNetworkError(execErr) && op.Attempts+1 >= maxServerCmdAttempts {
@@ -189,6 +197,17 @@ func drainPass(app *App) (processed int, offlineSeen bool) {
 	}
 	emitOutboxCount(app)
 	return processed, offlineSeen
+}
+
+// sendSubject extracts the subject of a queued send for the result toast.
+func sendSubject(op queue.Op) string {
+	var p struct {
+		Message struct {
+			Subject string `json:"subject"`
+		} `json:"message"`
+	}
+	_ = json.Unmarshal([]byte(op.Payload), &p)
+	return p.Message.Subject
 }
 
 // setOnline emits connection.state on transitions only.

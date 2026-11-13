@@ -1,6 +1,9 @@
+import { toast } from "sonner"
+
 import { getMailService } from "./serviceRegistry"
 import { isTauri } from "./tauriMailService"
 import { notifyNewMessage } from "../lib/notifications"
+import { t } from "../lib/i18n"
 import type { SyncEvent } from "../types"
 import { syncIntervalMinutes } from "../lib/settings"
 import { Store } from "../lib/store"
@@ -153,6 +156,18 @@ function handleAppEvent(e: EngineEvent): void {
     void scheduleRefresh()
     // native notification (Settings → Notifiche): unread messages only
     void notifyNewMessage(e.data)
+  } else if (kind === "send.result") {
+    // a queued send (undo window, schedule, retry after an outage) finished:
+    // the compose screen is gone, so tell the user how it went
+    const subject = String(e.data?.subject ?? "").trim()
+    if (e.data?.ok) {
+      toast.success(t("compose.sent"), { description: subject || undefined })
+    } else {
+      toast.error(t("compose.sendFailed"), {
+        description: [subject, String(e.data?.error ?? "")].filter(Boolean).join(" · "),
+        duration: 10_000,
+      })
+    }
   } else if (kind === "outbox.updated") {
     // offline-first queue: pending count changed (enqueue or replay)
     setOutboxPending(Number(e.data?.pending ?? 0))

@@ -110,19 +110,25 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
 
   // signature of the account that actually sends (the active one): appended
   // at send time only, so a reopened draft never accumulates copies
-  const [signature] = React.useState(() => {
-    const acc = accounts.find((a) => a.isActive) ?? accounts[0]
-    return acc ? getSignature(acc.id) : null
-  })
+  const sender = accounts.find((a) => a.isActive) ?? accounts[0]
+  const defaultSignature = sender ? getSignature(sender.id) : null
+  // The signature text is editable in place, for THIS message only: the saved
+  // default (Account → Firma) is never written back. Image and layout come
+  // from the default.
+  const [sigText, setSigText] = React.useState(defaultSignature?.text ?? "")
+  const signature = defaultSignature ? { ...defaultSignature, text: sigText } : null
+  const hasSignature = signature !== null
 
-  // grow the editor with its text (webviews without CSS field-sizing)
+  // grow the editors with their text (webviews without CSS field-sizing)
   const bodyRef = React.useRef<HTMLTextAreaElement>(null)
+  const sigRef = React.useRef<HTMLTextAreaElement>(null)
   React.useLayoutEffect(() => {
-    const el = bodyRef.current
-    if (!el || !signature) return
-    el.style.height = "auto"
-    el.style.height = `${el.scrollHeight}px`
-  }, [body, signature])
+    for (const el of [bodyRef.current, sigRef.current]) {
+      if (!el) continue
+      el.style.height = "auto"
+      el.style.height = `${el.scrollHeight}px`
+    }
+  }, [body, sigText, hasSignature])
 
   // M9: check whether the active account has a PGP private key in the vault
   React.useEffect(() => {
@@ -515,11 +521,32 @@ export function ComposePage({ accounts = [] }: ComposePageProps) {
         />
         {signature && (
           <>
-            <div
-              className="px-5 pb-3 text-sm text-muted-foreground"
-              // own markup: text escaped and image validated by signatureHtml
-              dangerouslySetInnerHTML={{ __html: signatureHtml(signature) }}
+            {/* the signature text is plain editable text (this message only);
+                the image keeps the saved position */}
+            {signature.image && signature.imagePosition === "above" && (
+              <div
+                className="px-5 pb-1"
+                dangerouslySetInnerHTML={{ __html: signatureHtml({ ...signature, text: "" }) }}
+              />
+            )}
+            <Textarea
+              ref={sigRef}
+              value={sigText}
+              onChange={(e) => {
+                setSigText(e.target.value)
+                markDirty()
+              }}
+              aria-label={t("signature.button")}
+              rows={1}
+              className="min-h-0 shrink-0 resize-none overflow-hidden rounded-none border-0 bg-transparent px-5 py-1 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
+            {signature.image && signature.imagePosition !== "above" && (
+              <div
+                className="px-5 pb-3"
+                // own markup: image validated by signatureHtml
+                dangerouslySetInnerHTML={{ __html: signatureHtml({ ...signature, text: "" }) }}
+              />
+            )}
             {/* the empty rest of the sheet still focuses the editor */}
             <div
               className="min-h-8 flex-1 cursor-text"
