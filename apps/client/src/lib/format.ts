@@ -81,7 +81,11 @@ const CANONICAL_FOLDER_KEYS: Record<string, string> = {
   snoozed: "folder.snoozed",
 }
 
-export function formatFolderName(name: string): string {
+export function formatFolderName(raw: string): string {
+  // servers with an "INBOX." personal namespace (Courier, cPanel, …) nest
+  // every folder under the inbox: "INBOX.Sent" shows as "Sent". Display only:
+  // the full name stays in imap_name for the server.
+  const name = raw.replace(/^INBOX[./](?=.)/i, "")
   const canonical = CANONICAL_FOLDER_KEYS[name.toLowerCase()]
   if (canonical) return t(canonical)
   if (name.length > 1 && name === name.toUpperCase() && /^[A-Z0-9 ]+$/.test(name)) {

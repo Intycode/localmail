@@ -1,5 +1,13 @@
 import { beforeEach, test, expect } from "bun:test"
-import { dayLabel, formatBytes, formatDate, formatProvider, initials, shortSender } from "./format"
+import {
+  dayLabel,
+  formatBytes,
+  formatDate,
+  formatFolderName,
+  formatProvider,
+  initials,
+  shortSender,
+} from "./format"
 import { setLocale } from "./i18n/index"
 
 beforeEach(() => setLocale("it"))
@@ -39,4 +47,13 @@ test("formatProvider shows friendly labels", () => {
   expect(formatProvider("gmail")).toBe("Gmail")
   expect(formatProvider("microsoft")).toBe("Microsoft")
   expect(formatProvider("mock")).toBe("mock")
+})
+
+test("formatFolderName hides the INBOX. namespace prefix", () => {
+  expect(formatFolderName("INBOX")).toBe("Posta in arrivo")
+  expect(formatFolderName("INBOX.Sent")).toBe(formatFolderName("Sent"))
+  expect(formatFolderName("INBOX/Trash")).toBe(formatFolderName("Trash"))
+  expect(formatFolderName("INBOX.Lavoro")).toBe("Lavoro")
+  expect(formatFolderName("INBOX.Clienti.Rossi")).toBe("Clienti.Rossi")
+  expect(formatFolderName("Inboxes")).toBe("Inboxes")
 })
