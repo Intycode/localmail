@@ -160,12 +160,27 @@ type SyncRef struct {
 	MailboxName string
 	UIDValidity uint32
 	LastUID     uint32
+	// LowestUID is the oldest server UID already downloaded (0 = unknown):
+	// the history backfill fetches the UIDs below it.
+	LowestUID uint32
 }
 
-// SyncRefs returns the syncable folders of an account.
+// SyncRefs returns the syncable folders of an account. Folders synced before
+// the backfill existed (lowest_uid 0 but last_uid set) derive their cursor
+// from the oldest message synced into them, or sit just above last_uid when
+// the folder is empty locally.
 func (s *Store) SyncRefs(accountID string) ([]SyncRef, error) {
 	rows, err := s.db.Query(
-		`SELECT id, imap_name, uidvalidity, last_uid FROM folders
+		`SELECT id, imap_name, uidvalidity, last_uid,
+		   CASE WHEN lowest_uid > 0 OR last_uid = 0 THEN lowest_uid
+		        ELSE COALESCE(
+		          (SELECT MIN(CAST(provider_msg_id AS INTEGER)) FROM messages
+		            WHERE folder = folders.id
+		              AND substr(id, 1, length('m:' || folders.account || ':' || folders.id || ':'))
+		                  = 'm:' || folders.account || ':' || folders.id || ':'),
+		          last_uid + 1)
+		   END
+		 FROM folders
 		 WHERE account=? AND imap_name<>'' AND type<>'drafts'`, accountID)
 	if err != nil {
 		return nil, err
@@ -174,7 +189,7 @@ func (s *Store) SyncRefs(accountID string) ([]SyncRef, error) {
 	var out []SyncRef
 	for rows.Next() {
 		var r SyncRef
-		if err := rows.Scan(&r.FolderID, &r.MailboxName, &r.UIDValidity, &r.LastUID); err != nil {
+		if err := rows.Scan(&r.FolderID, &r.MailboxName, &r.UIDValidity, &r.LastUID, &r.LowestUID); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -183,15 +198,31 @@ func (s *Store) SyncRefs(accountID string) ([]SyncRef, error) {
 }
 
 // UpdateFolderSyncState persists incremental state after a folder sync.
-func (s *Store) UpdateFolderSyncState(folderID string, uidValidity, lastUID uint32) error {
+func (s *Store) UpdateFolderSyncState(folderID string, uidValidity, lastUID, lowestUID uint32) error {
 	_, err := s.db.Exec(
 		`UPDATE folders SET
 		   uidvalidity=?,
 		   last_uid=?,
+		   lowest_uid=?,
 		   total    =(SELECT COUNT(*) FROM threads WHERE folder=?),
 		   unread   =(SELECT COUNT(*) FROM threads WHERE folder=? AND is_unread=1)
 		 WHERE id=?`,
-		uidValidity, lastUID, folderID, folderID, folderID,
+		uidValidity, lastUID, lowestUID, folderID, folderID, folderID,
+	)
+	return err
+}
+
+// UpdateFolderLowestUID moves the backfill cursor down after a stored batch
+// (only when UIDVALIDITY still matches: a reset folder restarts from zero),
+// and refreshes the counters the sidebar shows.
+func (s *Store) UpdateFolderLowestUID(folderID string, uidValidity, lowestUID uint32) error {
+	_, err := s.db.Exec(
+		`UPDATE folders SET
+		   lowest_uid=?,
+		   total    =(SELECT COUNT(*) FROM threads WHERE folder=?),
+		   unread   =(SELECT COUNT(*) FROM threads WHERE folder=? AND is_unread=1)
+		 WHERE id=? AND uidvalidity=?`,
+		lowestUID, folderID, folderID, folderID, uidValidity,
 	)
 	return err
 }

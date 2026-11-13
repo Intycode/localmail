@@ -146,7 +146,51 @@ func (w *Watcher) run(
 			w.watchOne(e, accountID, pv, mb, isPrimary, syncOnce, newProvider)
 		}(p, mailbox, i == 0)
 	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		w.backfill(e, accountID, newProvider, &syncMu)
+	}()
 	wg.Wait()
+}
+
+// backfillChunk is how many older messages one backfill step downloads: a
+// push sync waits at most one step for the shared mutex.
+const backfillChunk = 100
+
+// backfill downloads the folders' history in the background on its own
+// session, one chunk at a time under the watcher's sync mutex, until every
+// folder is complete or the watcher stops (the cursor is persisted, so the
+// next watcher resumes). Errors back off and redial like watchOne.
+func (w *Watcher) backfill(e *Engine, accountID string, newProvider func() (provider.MailProvider, error), mu *sync.Mutex) {
+	p, err := newProvider()
+	if err != nil {
+		log.Printf("backfill %s: connessione: %v", accountID, err)
+		return
+	}
+	defer func() { closeProvider(p) }()
+	done := map[string]bool{}
+	for attempt := 0; !w.stopped(); {
+		mu.Lock()
+		more, err := e.BackfillStep(accountID, p, backfillChunk, done)
+		mu.Unlock()
+		if err == nil && !more {
+			return
+		}
+		if err == nil {
+			attempt = 0
+			continue
+		}
+		log.Printf("backfill %s: %v (riprovo)", accountID, err)
+		closeProvider(p)
+		if !w.sleep(backoff(attempt)) {
+			return
+		}
+		attempt++
+		if np, nerr := newProvider(); nerr == nil {
+			p = np // fresh secret (OAuth tokens expire); else the closed one redials lazily
+		}
+	}
 }
 
 // watchOne keeps one mailbox watched for the lifetime of the watcher. When

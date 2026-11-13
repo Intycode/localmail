@@ -113,7 +113,7 @@ func BenchmarkBulk10k(b *testing.B) {
 	}
 }
 
-func BenchmarkThreadList(b *testing.B) {
+func BenchmarkThreadListFirstPage(b *testing.B) {
 	engine, accID := benchEnv(b)
 	if err := engine.SyncAccountWith(accID, benchMsgs(10000)); err != nil {
 		b.Fatal(err)
@@ -122,16 +122,12 @@ func BenchmarkThreadList(b *testing.B) {
 	threads := thread.New(db)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		list, err := threads.ListByFolder("f-inbox")
+		list, err := threads.ListByFolder("f-inbox", thread.Page{Limit: 100})
 		if err != nil {
 			b.Fatal(err)
 		}
-		for j := range list {
-			ids, err := threads.MessageIDs(list[j].ID)
-			if err != nil {
-				b.Fatal(err)
-			}
-			list[j].MessageIDs = ids
+		if err := threads.FillMessageIDs(list); err != nil {
+			b.Fatal(err)
 		}
 	}
 }

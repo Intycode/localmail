@@ -77,11 +77,9 @@ func (p *ImapProvider) SyncFolder(ref FolderRef) (FolderSync, error) {
 
 	var targets []uint32
 	if initial {
-		// newest N UIDs (list is ascending)
-		if len(all) > imap.InitialWindow {
-			all = all[len(all)-imap.InitialWindow:]
-		}
-		targets = all
+		// newest N UIDs (list is ascending); older ones come from the
+		// background backfill (FetchOlder). AllUIDs stays the full list.
+		targets = all[max(0, len(all)-imap.InitialWindow):]
 	} else {
 		for _, u := range all {
 			if u > ref.LastUID {
@@ -137,6 +135,45 @@ func (p *ImapProvider) SyncFolder(ref FolderRef) (FolderSync, error) {
 
 // maxFlagSync caps the flag re-read per folder pass.
 const maxFlagSync = 5000
+
+// FetchOlder implements Backfiller: up to limit UIDs below `below`, newest
+// first, streamed one FetchBatch at a time.
+func (p *ImapProvider) FetchOlder(mailbox string, below uint32, limit int, onBatch BackfillBatch) (int, error) {
+	s, err := p.sessionFor()
+	if err != nil {
+		return 0, err
+	}
+	state, err := s.Select(mailbox)
+	if err != nil {
+		return 0, err
+	}
+	all, err := s.UIDs()
+	if err != nil {
+		return 0, err
+	}
+	n := 0 // UIDs below the cursor (list is ascending)
+	for n < len(all) && all[n] < below {
+		n++
+	}
+	older := all[max(0, n-limit):n]
+	for end := len(older); end > 0; end -= imap.FetchBatch {
+		chunk := older[max(0, end-imap.FetchBatch):end]
+		fetched, err := s.Fetch(chunk)
+		if err != nil {
+			return 0, err
+		}
+		batch := make([]RawMessage, 0, len(fetched))
+		for _, m := range fetched {
+			batch = append(batch, RawMessage{UID: m.UID, Flags: m.Flags, Data: m.Data})
+		}
+		// chunk[0] (not the oldest fetched): a UID the server returns no
+		// body for must not pin the cursor
+		if err := onBatch(state.UIDValidity, chunk[0], batch); err != nil {
+			return 0, err
+		}
+	}
+	return n - len(older), nil
+}
 
 func (p *ImapProvider) selectAndDo(mailbox string, fn func(s imap.Session) error) error {
 	s, err := p.sessionFor()

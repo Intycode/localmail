@@ -233,6 +233,7 @@ export const en: Record<string, string> = {
   "accounts.useThis": "Use this account",
   "accounts.syncing": "Syncing…",
   "accounts.sync": "Sync",
+  "accounts.backfill": "Downloading older mail… {n} to go",
   "accounts.removeConfirmTitle": "Remove {name}?",
   "accounts.removeConfirmDesc":
     "The account will be deleted along with all locally downloaded emails and the password saved in the keychain. Messages remain on the server.",

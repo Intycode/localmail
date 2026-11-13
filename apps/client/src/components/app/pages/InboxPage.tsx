@@ -8,7 +8,7 @@ import { getSetting, getSettingString, setSettingString } from "@/lib/settings"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useT } from "@/lib/i18n"
 import { getMailService } from "@/services/serviceRegistry"
-import type { ThreadListOptions } from "@/services/mailService"
+import { mergeFirstPage, THREAD_PAGE, type ThreadListOptions } from "@/services/mailService"
 import { threadStore } from "@/stores/threadStore"
 import type { Account, Thread } from "@/types"
 import { ThreadContextMenu } from "@/components/app/ThreadContextMenu"
@@ -91,25 +91,74 @@ export function InboxPage({
   const freshFromStore = stored.loaded && stored.folderId === key && stored.threads.length > 0
 
   React.useEffect(() => {
-    if (freshFromStore) setThreads(stored.threads)
+    if (freshFromStore) setThreads((prev) => mergeFirstPage(stored.threads, prev))
   }, [freshFromStore, stored.threads])
+
+  const listOpts: ThreadListOptions | undefined = accountId
+    ? { accountId, folderType: "inbox" }
+    : undefined
+  // Pages: the list loads THREAD_PAGE threads at a time; scrolling near the
+  // end pulls the next page (the whole history can be tens of thousands).
+  const [hasMore, setHasMore] = React.useState(false)
+  const loadingMore = React.useRef(false)
 
   // Pull the view's threads whenever the effective folder/account changes.
   React.useEffect(() => {
     let alive = true
     setLoading(true)
-    const opts: ThreadListOptions | undefined = accountId
-      ? { accountId, folderType: "inbox" }
-      : undefined
+    setHasMore(false)
     getMailService()
-      .then((svc) => svc.getThreads(accountId ? undefined : folderId, opts))
-      .then((t) => alive && setThreads(t ?? []))
+      .then((svc) => svc.getThreads(accountId ? undefined : folderId, listOpts))
+      .then((t) => {
+        if (!alive) return
+        setThreads(t ?? [])
+        setHasMore((t ?? []).length >= THREAD_PAGE)
+      })
       .catch((e: unknown) => console.error("inbox", e))
       .finally(() => alive && setLoading(false))
     return () => {
       alive = false
     }
   }, [folderId, accountId])
+
+  const loadMore = React.useCallback(async () => {
+    const last = threads[threads.length - 1]
+    if (!hasMore || loadingMore.current || !last) return
+    loadingMore.current = true
+    try {
+      const svc = await getMailService()
+      const next = await svc.getThreads(accountId ? undefined : folderId, {
+        ...listOpts,
+        before: last,
+      })
+      setThreads((prev) => {
+        const ids = new Set(prev.map((x) => x.id))
+        return [...prev, ...next.filter((x) => !ids.has(x.id))]
+      })
+      setHasMore(next.length >= THREAD_PAGE)
+    } catch (e) {
+      console.error("inbox page", e)
+    } finally {
+      loadingMore.current = false
+    }
+  }, [threads, hasMore, folderId, accountId])
+
+  // Sentinel at the end of the list: within ~2 screens of it, load the next page.
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const sentinelRef = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !hasMore) return
+    const io = new IntersectionObserver(
+      (entries) => entries[0]?.isIntersecting && void loadMore(),
+      {
+        root: scrollRef.current,
+        rootMargin: "0px 0px 200% 0px",
+      },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [loadMore, hasMore])
 
   // Archive via the "a" shortcut (dispatched from AppShell).
   React.useEffect(() => {
@@ -142,7 +191,8 @@ export function InboxPage({
       : folder
         ? formatFolderName(folder.name)
         : t("folder.inbox")
-  const unread = threads.filter((x) => x.isUnread).length
+  // the folder counter covers threads beyond the loaded pages
+  const unread = folder && !accountId ? folder.unread : threads.filter((x) => x.isUnread).length
 
   function select(id: string): void {
     setSelectedId(id)
@@ -185,7 +235,7 @@ export function InboxPage({
     )
   } else {
     list = (
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         {threads.map((t, i) => {
           const label = dayLabel(t.date)
           const showLabel = label !== "" && (i === 0 || label !== dayLabel(threads[i - 1].date))
@@ -214,6 +264,15 @@ export function InboxPage({
             </React.Fragment>
           )
         })}
+        {hasMore && (
+          <div ref={sentinelRef} aria-busy="true" className="flex gap-3 px-4 py-3">
+            <Skeleton className="size-8 rounded-full" />
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3.5 w-full" />
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -242,10 +301,14 @@ export function InboxPage({
         aria-valuemin={LIST_MIN}
         aria-valuemax={LIST_MAX}
         tabIndex={0}
-        className="-ml-1 hidden w-2 shrink-0 cursor-col-resize touch-none hover:bg-primary/20 focus-visible:bg-primary/30 focus-visible:outline-none md:block"
+        className="-ml-1 hidden w-2 shrink-0 cursor-col-resize touch-none focus-visible:bg-primary/30 focus-visible:outline-none md:block"
         onPointerDown={(e) => {
+          // no focus (and no text selection) from the mouse: WebKit would keep
+          // the focus tint lit after the drag; the keyboard still focuses it
+          e.preventDefault()
           e.currentTarget.setPointerCapture(e.pointerId)
         }}
+        onPointerUp={(e) => e.currentTarget.blur()}
         onPointerMove={(e) => {
           if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
           const left = e.currentTarget.parentElement!.getBoundingClientRect().left

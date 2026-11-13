@@ -50,6 +50,18 @@ type RawMessage struct {
 	Data  []byte
 }
 
+// BackfillBatch receives one chunk of history: the folder UIDVALIDITY, the
+// oldest UID the chunk covered (the new cursor once stored) and the messages.
+type BackfillBatch func(uidValidity, lowest uint32, msgs []RawMessage) error
+
+// Backfiller is implemented by providers that can download a folder's
+// history below a known UID (IMAP). Others keep only their sync window.
+type Backfiller interface {
+	// FetchOlder streams up to limit messages with UID < below, newest
+	// chunk first, and returns how many older UIDs remain on the server.
+	FetchOlder(mailbox string, below uint32, limit int, onBatch BackfillBatch) (remaining int, err error)
+}
+
 // MailProvider is the transport abstraction the sync engine consumes.
 type MailProvider interface {
 	// SyncFolder pulls one folder's new messages from the remote server.

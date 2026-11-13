@@ -235,6 +235,7 @@ export const it: Record<string, string> = {
   "accounts.useThis": "Usa questo account",
   "accounts.syncing": "Sincronizzazione…",
   "accounts.sync": "Sincronizza",
+  "accounts.backfill": "Scarico le mail meno recenti… ne mancano {n}",
   "accounts.removeConfirmTitle": "Rimuovere {name}?",
   "accounts.removeConfirmDesc":
     "L'account verrà eliminato insieme a tutte le email scaricate localmente e alla password salvata nel keychain. I messaggi restano sul server.",

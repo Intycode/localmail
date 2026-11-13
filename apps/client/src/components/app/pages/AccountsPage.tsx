@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { formatProvider } from "@/lib/format"
 import { setAccounts as setStoreAccounts } from "@/stores/accountStore"
 import { getMailService } from "@/services/serviceRegistry"
-import { syncAccount, syncStore } from "@/services/syncService"
+import { backfillRemaining, syncAccount, syncStore } from "@/services/syncService"
 import { isTauri } from "@/services/tauriMailService"
 import { switchAccount, useAccounts } from "@/lib/useAccounts"
 import { useT } from "@/lib/i18n"
@@ -87,9 +87,10 @@ function AccountCard({ account }: { account: Account }) {
   const t = useT()
   const [removing, setRemoving] = React.useState(false)
   // real sync state, not a timer: spins until the engine reports the outcome
-  const syncEvent = React.useSyncExternalStore(syncStore.subscribe, syncStore.get, syncStore.get)
-    .byAccount[account.id]
+  const sync = React.useSyncExternalStore(syncStore.subscribe, syncStore.get, syncStore.get)
+  const syncEvent = sync.byAccount[account.id]
   const syncing = syncEvent?.type === "sync.started" || syncEvent?.type === "sync.progress"
+  const backfill = backfillRemaining(sync, account.id)
 
   function use(): void {
     switchAccount(account.id).catch(() => toast.error(t("accounts.setActiveFailed")))
@@ -150,6 +151,11 @@ function AccountCard({ account }: { account: Account }) {
           </span>
           <CopyButton value={account.email} label={t("thread.copyEmail")} size="icon-xs" />
         </div>
+        {backfill > 0 && (
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {t("accounts.backfill", { n: backfill.toLocaleString() })}
+          </p>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {!account.isActive && (

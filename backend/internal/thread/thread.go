@@ -4,6 +4,7 @@ package thread
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"mail/backend/internal/domain"
@@ -43,10 +44,35 @@ func (s *Store) linkMessage(threadID, messageID string) error {
 // views — including the unified inbox — never need per-thread follow-ups.
 const threadCols = `id,folder,account,subject,snippet,last_date,is_unread,is_starred,message_count,has_attach,from_name,from_email`
 
-// ListByFolder returns threads for a folder, newest first.
-func (s *Store) ListByFolder(folderID string) ([]domain.Thread, error) {
-	rows, err := s.db.Query(
-		`SELECT `+threadCols+` FROM threads WHERE folder=? ORDER BY last_date DESC`, folderID)
+// Page selects one page of a newest-first thread list: the threads after
+// Before (the last thread of the previous page; empty = first page), at most
+// Limit of them (<= 0 = no limit).
+type Page struct {
+	BeforeID   string
+	BeforeDate time.Time // fallback when BeforeID was deleted meanwhile
+	Limit      int
+}
+
+// keyset appends the "older than the cursor" condition and the ordering. The
+// cursor's last_date is read back from the row itself: stored dates are not
+// all in one text format, so a client-side value would not compare exactly.
+func (p Page) keyset(q string, args []any) (string, []any) {
+	if p.BeforeID != "" {
+		q += ` AND (t.last_date, t.id) < (COALESCE((SELECT last_date FROM threads WHERE id=?), ?), ?)`
+		args = append(args, p.BeforeID, p.BeforeDate.UTC().Format(time.RFC3339Nano), p.BeforeID)
+	}
+	q += ` ORDER BY t.last_date DESC, t.id DESC`
+	if p.Limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, p.Limit)
+	}
+	return q, args
+}
+
+// ListByFolder returns one page of a folder's threads, newest first.
+func (s *Store) ListByFolder(folderID string, page Page) ([]domain.Thread, error) {
+	q, args := page.keyset(`SELECT `+threadCols+` FROM threads t WHERE t.folder=?`, []any{folderID})
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -54,13 +80,10 @@ func (s *Store) ListByFolder(folderID string) ([]domain.Thread, error) {
 	return scanThreads(rows)
 }
 
-// ListUnified returns threads across accounts for one folder type (the
-// unified inbox joins on folders.type, so every account contributes its own
-// folder), newest first. An empty accountID means "all accounts".
-func (s *Store) ListUnified(accountID, folderType string, limit int) ([]domain.Thread, error) {
-	if limit <= 0 {
-		limit = 200
-	}
+// ListUnified returns one page of threads across accounts for one folder type
+// (the unified inbox joins on folders.type, so every account contributes its
+// own folder), newest first. An empty accountID means "all accounts".
+func (s *Store) ListUnified(accountID, folderType string, page Page) ([]domain.Thread, error) {
 	q := `SELECT t.id,t.folder,t.account,t.subject,t.snippet,t.last_date,t.is_unread,t.is_starred,t.message_count,t.has_attach,t.from_name,t.from_email
 		 FROM threads t JOIN folders f ON f.id = t.folder
 		 WHERE f.type = ?`
@@ -69,8 +92,7 @@ func (s *Store) ListUnified(accountID, folderType string, limit int) ([]domain.T
 		q += ` AND t.account = ?`
 		args = append(args, accountID)
 	}
-	q += ` ORDER BY t.last_date DESC LIMIT ?`
-	args = append(args, limit)
+	q, args = page.keyset(q, args)
 	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
@@ -110,6 +132,36 @@ func (s *Store) MessageIDs(threadID string) ([]string, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// FillMessageIDs sets MessageIDs on every thread of a list page with one
+// query (oldest first per thread), instead of one query per thread.
+func (s *Store) FillMessageIDs(threads []domain.Thread) error {
+	if len(threads) == 0 {
+		return nil
+	}
+	idx := make(map[string]int, len(threads))
+	args := make([]any, len(threads))
+	for i := range threads {
+		idx[threads[i].ID] = i
+		args[i] = threads[i].ID
+	}
+	rows, err := s.db.Query(
+		`SELECT thread, id FROM messages WHERE thread IN (?`+strings.Repeat(",?", len(threads)-1)+`) ORDER BY date ASC`,
+		args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tid, id string
+		if err := rows.Scan(&tid, &id); err != nil {
+			return err
+		}
+		t := &threads[idx[tid]]
+		t.MessageIDs = append(t.MessageIDs, id)
+	}
+	return rows.Err()
 }
 
 func (s *Store) MarkRead(messageID string) error {

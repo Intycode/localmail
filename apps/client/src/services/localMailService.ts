@@ -9,7 +9,7 @@ import type {
   SearchResult,
   Thread,
 } from "../types"
-import type { MailService, ThreadListOptions } from "./mailService"
+import { THREAD_PAGE, type MailService, type ThreadListOptions } from "./mailService"
 
 /**
  * LocalMailService — the empty, local-first implementation of MailService.
@@ -38,6 +38,11 @@ export class LocalMailService implements MailService {
 
   async getThreads(folderId: string | undefined, opts?: ThreadListOptions): Promise<Thread[]> {
     const byDate = (a: Thread, b: Thread) => Date.parse(b.date) - Date.parse(a.date)
+    // same paging contract as the engine: THREAD_PAGE threads after `before`
+    const page = (list: Thread[]) => {
+      const start = opts?.before ? list.findIndex((t) => t.id === opts.before?.id) + 1 : 0
+      return list.slice(start, start + THREAD_PAGE)
+    }
     if (opts?.accountId) {
       // account-level view: every folder of the given type, optionally scoped
       // to one account ("all" = every account) — mirrors the engine's JOIN
@@ -49,9 +54,9 @@ export class LocalMailService implements MailService {
           )
           .map((f) => f.id),
       )
-      return this.threads.filter((t) => folderIds.has(t.folderId)).sort(byDate)
+      return page(this.threads.filter((t) => folderIds.has(t.folderId)).sort(byDate))
     }
-    return this.threads.filter((t) => t.folderId === folderId).sort(byDate)
+    return page(this.threads.filter((t) => t.folderId === folderId).sort(byDate))
   }
 
   async getThread(threadId: string): Promise<Thread> {

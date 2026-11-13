@@ -588,20 +588,33 @@ func opFoldersList(_ context.Context, app *App, params json.RawMessage) (any, er
 //   - {accountId: "all"|id, type?}   → account-level view across its folders
 //     (the unified inbox: type defaults to "inbox"; every account contributes
 //     its own folder of that type; newest first, hard cap 200 rows)
+// maxThreadPage caps one threads.list page (and is the default): with the
+// whole history synced a folder can hold tens of thousands of threads, so the
+// UI pages through them instead of loading them all.
+const maxThreadPage = 100
+
 func opThreadsList(_ context.Context, app *App, params json.RawMessage) (any, error) {
 	var p struct {
 		FolderID   string `json:"folderId"`
 		AccountID  string `json:"accountId"`
 		FolderType string `json:"type"`
+		// pagination: the last thread of the previous page (empty = first page)
+		BeforeID   string    `json:"beforeId"`
+		BeforeDate time.Time `json:"beforeDate"`
+		Limit      int       `json:"limit"`
 	}
 	if err := decode(params, &p); err != nil {
 		return nil, fmt.Errorf("parametri non validi")
 	}
+	if p.Limit <= 0 || p.Limit > maxThreadPage {
+		p.Limit = maxThreadPage
+	}
+	page := thread.Page{BeforeID: p.BeforeID, BeforeDate: p.BeforeDate, Limit: p.Limit}
 	var threads []domain.Thread
 	var err error
 	switch {
 	case p.FolderID != "":
-		threads, err = app.Threads.ListByFolder(p.FolderID)
+		threads, err = app.Threads.ListByFolder(p.FolderID, page)
 	case p.AccountID != "":
 		accountID := p.AccountID
 		if accountID == "all" {
@@ -610,19 +623,15 @@ func opThreadsList(_ context.Context, app *App, params json.RawMessage) (any, er
 		if p.FolderType == "" {
 			p.FolderType = "inbox"
 		}
-		threads, err = app.Threads.ListUnified(accountID, p.FolderType, 200)
+		threads, err = app.Threads.ListUnified(accountID, p.FolderType, page)
 	default:
 		return nil, fmt.Errorf("folderId o accountId mancante")
 	}
 	if err != nil {
 		return nil, err
 	}
-	for i := range threads {
-		ids, err := app.Threads.MessageIDs(threads[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		threads[i].MessageIDs = ids
+	if err := app.Threads.FillMessageIDs(threads); err != nil {
+		return nil, err
 	}
 	return threads, nil
 }

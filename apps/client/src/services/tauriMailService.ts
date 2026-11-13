@@ -13,7 +13,12 @@ import type {
   SearchResult,
   Thread,
 } from "../types"
-import type { MailService, OutboxItem, ThreadListOptions } from "./mailService"
+import {
+  THREAD_PAGE,
+  type MailService,
+  type OutboxItem,
+  type ThreadListOptions,
+} from "./mailService"
 
 /**
  * TauriMailService — MailService backed by the Go engine through the Tauri
@@ -299,6 +304,8 @@ export class TauriMailService implements MailService, AccountAdminService {
         folderId: folderId ?? "",
         accountId: opts?.accountId ?? "",
         type: opts?.folderType ?? "",
+        limit: THREAD_PAGE,
+        ...(opts?.before && { beforeId: opts.before.id, beforeDate: opts.before.date }),
       })) ?? []
     return threads.map(normalizeThread)
   }

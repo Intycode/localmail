@@ -11,6 +11,7 @@
 package sync
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -148,12 +149,87 @@ func (e *Engine) syncFolder(accountID string, ref account.SyncRef, p provider.Ma
 		return nil
 	}
 
-	// ingest parses, threads, rules-matches and stores one batch of raw
-	// messages in its own transaction: a first sync of big messages holds one
-	// batch in memory, not the whole window.
+	ingest := e.ingester(accountID, ref, p, incremental, true)
+	var minSeen uint32 // oldest UID fetched this pass (backfill cursor on a first sync)
+	seen := func(raws []provider.RawMessage) {
+		for _, r := range raws {
+			if minSeen == 0 || r.UID < minSeen {
+				minSeen = r.UID
+			}
+		}
+	}
+
+	fs, err := p.SyncFolder(provider.FolderRef{
+		FolderID:    ref.FolderID,
+		MailboxName: ref.MailboxName,
+		UIDValidity: ref.UIDValidity,
+		LastUID:     ref.LastUID,
+		OnBatch: func(uidValidity uint32, raws []provider.RawMessage) error {
+			if err := wipeIfStale(uidValidity); err != nil {
+				return err
+			}
+			seen(raws)
+			return ingest(raws)
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if err := wipeIfStale(fs.UIDValidity); err != nil {
+		return err
+	}
+	// providers that do not stream (JMAP, Graph) return everything here
+	seen(fs.Messages)
+	if err := ingest(fs.Messages); err != nil {
+		return err
+	}
+
+	// Reconcile server-side deletions: local UIDs missing from the server.
+	if !fs.Partial {
+		local, err := e.messages.LocalUIDs(ref.FolderID)
+		if err != nil {
+			return err
+		}
+		if missing := difference(local, fs.AllUIDs); len(missing) > 0 {
+			if err := e.messages.DeleteUIDs(ref.FolderID, missing); err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(fs.Flags) > 0 {
+		unread := make(map[string]bool, len(fs.Flags))
+		for uid, flags := range fs.Flags {
+			unread[messageID(accountID, ref.FolderID, uid)] = !hasFlag(flags, "\\Seen")
+		}
+		if err := e.messages.ApplyServerRead(ref.FolderID, unread); err != nil {
+			return err
+		}
+	}
+
+	highest, lowest := ref.LastUID, ref.LowestUID
+	if ref.UIDValidity != 0 && fs.UIDValidity != ref.UIDValidity {
+		// folder was wiped above: the old marks are meaningless
+		highest, lowest = 0, 0
+	}
+	if n := len(fs.AllUIDs); n > 0 && fs.AllUIDs[n-1] > highest {
+		highest = fs.AllUIDs[n-1]
+	}
+	if lowest == 0 {
+		lowest = minSeen // first sync: history below the window is backfilled
+	}
+	return e.accounts.UpdateFolderSyncState(ref.FolderID, fs.UIDValidity, highest, lowest)
+}
+
+// ingester returns a function that parses, threads, rules-matches and stores
+// one batch of raw messages in its own transaction (a big sync holds one
+// batch in memory, not the whole window). announce emits message.created per
+// stored message (live push); applyRules runs the account's rules, which may
+// act on the server (move, mark read).
+func (e *Engine) ingester(accountID string, ref account.SyncRef, p provider.MailProvider, announce, applyRules bool) func([]provider.RawMessage) error {
 	var rules []domain.Rule
-	rulesLoaded := false
-	ingest := func(raws []provider.RawMessage) error {
+	rulesLoaded := !applyRules
+	return func(raws []provider.RawMessage) error {
 		if len(raws) == 0 {
 			return nil
 		}
@@ -222,7 +298,7 @@ func (e *Engine) syncFolder(accountID string, ref account.SyncRef, p provider.Ma
 		if err := e.messages.UpsertBatch(batch); err != nil {
 			return err
 		}
-		if incremental {
+		if announce {
 			// push pass: announce every new message so the UI refreshes live
 			for i := range batch {
 				e.Bus.MessageCreated(batch[i])
@@ -236,61 +312,64 @@ func (e *Engine) syncFolder(accountID string, ref account.SyncRef, p provider.Ma
 		}
 		return nil
 	}
+}
 
-	fs, err := p.SyncFolder(provider.FolderRef{
-		FolderID:    ref.FolderID,
-		MailboxName: ref.MailboxName,
-		UIDValidity: ref.UIDValidity,
-		LastUID:     ref.LastUID,
-		OnBatch: func(uidValidity uint32, raws []provider.RawMessage) error {
-			if err := wipeIfStale(uidValidity); err != nil {
-				return err
-			}
-			return ingest(raws)
-		},
-	})
+// errStaleFolder stops a backfill whose folder changed UIDVALIDITY: the next
+// regular sync wipes and restarts it.
+var errStaleFolder = errors.New("uidvalidity changed")
+
+// BackfillStep downloads up to limit older messages of the first folder that
+// still has history on the server (skipping folders in done, which it fills
+// as they complete) and moves its cursor down after every stored batch, so an
+// interruption resumes where it stopped. Rules are not applied: they act on
+// the server and are meant for incoming mail, not years of archive. It
+// returns false once every folder is complete or the provider cannot
+// backfill.
+func (e *Engine) BackfillStep(accountID string, p provider.MailProvider, limit int, done map[string]bool) (bool, error) {
+	bf, ok := p.(provider.Backfiller)
+	if !ok {
+		return false, nil
+	}
+	refs, err := e.accounts.SyncRefs(accountID)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if err := wipeIfStale(fs.UIDValidity); err != nil {
-		return err
-	}
-	// providers that do not stream (JMAP, Graph) return everything here
-	if err := ingest(fs.Messages); err != nil {
-		return err
-	}
-
-	// Reconcile server-side deletions: local UIDs missing from the server.
-	if !fs.Partial {
-		local, err := e.messages.LocalUIDs(ref.FolderID)
-		if err != nil {
-			return err
+	for _, ref := range refs {
+		// lowest 0: never synced (or empty); 1: nothing can be older
+		if done[ref.FolderID] || ref.UIDValidity == 0 || ref.LowestUID <= 1 {
+			continue
 		}
-		if missing := difference(local, fs.AllUIDs); len(missing) > 0 {
-			if err := e.messages.DeleteUIDs(ref.FolderID, missing); err != nil {
-				return err
+		ingest := e.ingester(accountID, ref, p, false, false)
+		remaining, err := bf.FetchOlder(ref.MailboxName, ref.LowestUID, limit,
+			func(uidValidity, lowest uint32, raws []provider.RawMessage) error {
+				if uidValidity != ref.UIDValidity {
+					return errStaleFolder
+				}
+				if err := ingest(raws); err != nil {
+					return err
+				}
+				return e.accounts.UpdateFolderLowestUID(ref.FolderID, uidValidity, lowest)
+			})
+		if errors.Is(err, errStaleFolder) {
+			done[ref.FolderID] = true
+			continue
+		}
+		if err != nil {
+			return true, fmt.Errorf("backfill %s/%s: %w", accountID, ref.FolderID, err)
+		}
+		if remaining == 0 {
+			done[ref.FolderID] = true
+			// cursor 1 = complete: later watchers skip the folder without a round trip
+			if err := e.accounts.UpdateFolderLowestUID(ref.FolderID, ref.UIDValidity, 1); err != nil {
+				return true, err
 			}
 		}
+		e.Bus.Publish("sync.backfill", map[string]any{
+			"accountId": accountID, "folderId": ref.FolderID, "remaining": remaining,
+		})
+		return true, nil
 	}
-
-	if len(fs.Flags) > 0 {
-		unread := make(map[string]bool, len(fs.Flags))
-		for uid, flags := range fs.Flags {
-			unread[messageID(accountID, ref.FolderID, uid)] = !hasFlag(flags, "\\Seen")
-		}
-		if err := e.messages.ApplyServerRead(ref.FolderID, unread); err != nil {
-			return err
-		}
-	}
-
-	highest := ref.LastUID
-	if ref.UIDValidity != 0 && fs.UIDValidity != ref.UIDValidity {
-		highest = 0 // folder was wiped above: the old high-water mark is meaningless
-	}
-	if n := len(fs.AllUIDs); n > 0 && fs.AllUIDs[n-1] > highest {
-		highest = fs.AllUIDs[n-1]
-	}
-	return e.accounts.UpdateFolderSyncState(ref.FolderID, fs.UIDValidity, highest)
+	return false, nil
 }
 
 func messageID(accountID, folderID string, uid uint32) string {

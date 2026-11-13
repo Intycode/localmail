@@ -12,9 +12,16 @@ export interface SyncState {
   /** latest sync status per account id */
   byAccount: Record<string, SyncEvent | null>
   running: boolean
+  /** history download: messages still on the server per account → folder */
+  backfill: Record<string, Record<string, number>>
 }
 
-export const syncStore = new Store<SyncState>({ byAccount: {}, running: false })
+export const syncStore = new Store<SyncState>({ byAccount: {}, running: false, backfill: {} })
+
+/** Older messages the account still has to download (folders seen so far). */
+export function backfillRemaining(s: SyncState, accountId: string): number {
+  return Object.values(s.backfill[accountId] ?? {}).reduce((a, b) => a + b, 0)
+}
 
 export function syncAccount(accountId: string): void {
   syncStore.update((s) => ({
@@ -127,6 +134,18 @@ function handleAppEvent(e: EngineEvent): void {
       },
     }))
   } else if (kind === "account.updated") {
+    void scheduleRefresh()
+  } else if (kind === "sync.backfill") {
+    // background history download: one event per stored chunk
+    const folderId = String(e.data?.folderId ?? "")
+    const remaining = Number(e.data?.remaining ?? 0)
+    syncStore.update((s) => ({
+      ...s,
+      backfill: {
+        ...s.backfill,
+        [accountId]: { ...s.backfill[accountId], [folderId]: remaining },
+      },
+    }))
     void scheduleRefresh()
   } else if (kind === "message.created") {
     // IDLE push: a new message arrived outside a full sync cycle. The

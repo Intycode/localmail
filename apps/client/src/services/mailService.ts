@@ -28,6 +28,22 @@ import type {
 export interface ThreadListOptions {
   accountId?: string
   folderType?: string
+  /** Pagination: the last thread of the previous page (omit for the first page). */
+  before?: Pick<Thread, "id" | "date">
+}
+
+/** Threads per getThreads page (the engine caps threads.list at the same size). */
+export const THREAD_PAGE = 100
+
+/**
+ * A live refresh delivers the first page again: keep the older pages already
+ * loaded below it, so a refresh never yanks the user back to the top.
+ */
+export function mergeFirstPage(page: Thread[], prev: Thread[]): Thread[] {
+  if (page.length < THREAD_PAGE) return page // the whole view fits one page
+  const last = Date.parse(page[page.length - 1].date)
+  const ids = new Set(page.map((t) => t.id))
+  return [...page, ...prev.filter((t) => !ids.has(t.id) && Date.parse(t.date) <= last)]
 }
 
 /** One parked operation in the engine's outbox (backend queue.Op). */
