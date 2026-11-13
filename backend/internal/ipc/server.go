@@ -665,20 +665,6 @@ func opMessageGet(_ context.Context, app *App, params json.RawMessage) (any, err
 	return m, nil
 }
 
-// extractArmor returns the first complete PGP MESSAGE armor block found in s
-// (the engine stores the armor as the message body for encrypted mail).
-func extractArmor(s string) string {
-	i := strings.Index(s, "-----BEGIN PGP MESSAGE-----")
-	if i < 0 {
-		return s
-	}
-	j := strings.Index(s[i:], "-----END PGP MESSAGE-----")
-	if j < 0 {
-		return ""
-	}
-	return s[i : i+j+len("-----END PGP MESSAGE-----")]
-}
-
 // applyPGPOnView decrypts an encrypted body in place (the DB keeps the
 // ciphertext at rest) and verifies signed messages whose status is still
 // pending. Best-effort: without the key the payload is shown as-is and the
@@ -906,6 +892,9 @@ func moveThreadToFolder(app *App, threadID, targetFolder string) error {
 			}
 		}
 		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
 	}
 	if err := app.Threads.MoveToFolder(threadID, targetID); err != nil {
 		return err
@@ -1410,6 +1399,9 @@ func watchMailboxes(app *App, accountID string) []string {
 		}
 		seen[name] = true
 		out = append(out, name)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("watch folders %s: %v", accountID, err) // watch what was read
 	}
 	return out
 }

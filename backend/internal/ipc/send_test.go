@@ -80,7 +80,8 @@ func (f *fakeSMTP) serve(t *testing.T, conn net.Conn) {
 				if dl == "." {
 					break
 				}
-				b.WriteString(dl + "\r\n")
+				b.WriteString(dl)
+				b.WriteString("\r\n")
 			}
 			f.msg += b.String()
 			f.deliveries.Add(1)
